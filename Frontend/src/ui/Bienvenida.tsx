@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImageUp, Sun, Moon, Library } from 'lucide-react'
+import { ImageUp, Sun, Moon, Library, BookOpen, Trophy } from 'lucide-react'
 import { analizarEsquematico } from '../api/analizar'
 import { planificarCircuito } from '../api/planificar'
 import { crearSesion, abrirSesion } from '../api/sesiones'
@@ -24,6 +24,8 @@ type Props = {
   usuario: Usuario | null
   onActualizarUsuario: (u: Usuario) => void
   onCerrarSesion: () => void
+  onAbrirBiblioteca: () => void
+  onAbrirRetos: () => void
 }
 
 // Por ahora la única intención soportada end-to-end es "armar la protoboard"
@@ -47,7 +49,7 @@ const PROMPT_ARMAR_PROTOBOARD = [
 
 // Pantalla de entrada: subir esquemático + prompt opcional + modelo.
 // Si no hay prompt, se pregunta la intención con un cuestionario ligero.
-function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesion }: Props) {
+function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesion, onAbrirBiblioteca, onAbrirRetos }: Props) {
   const [imagen, setImagen] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -220,7 +222,27 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
       <ToastHistorial mensaje={avisoHistorial} />
       {/* ---- Sidebar: historial real de sesiones del usuario (#73) ---- */}
       <aside className="hidden md:flex w-64 flex-col shrink-0 p-4 gap-3" style={{ borderRight: '1px solid var(--border)' }}>
-        <span className="text-sm font-semibold mb-1">Chats</span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-semibold">Chats</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onAbrirBiblioteca}
+              className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition"
+              style={{ color: 'var(--ink-soft)' }}
+              title="Biblioteca de materiales"
+            >
+              <BookOpen size={15} />
+            </button>
+            <button
+              onClick={onAbrirRetos}
+              className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition"
+              style={{ color: 'var(--ink-soft)' }}
+              title="Retos"
+            >
+              <Trophy size={15} />
+            </button>
+          </div>
+        </div>
 
         <BuscadorHistorial value={busqueda} onChange={setBusqueda} />
 

@@ -5,11 +5,19 @@ import EncuestaNivel from './ui/EncuestaNivel'
 import Bienvenida from './ui/Bienvenida'
 import VistaPrincipal from './ui/VistaPrincipal'
 import ImportarCompartido from './ui/ImportarCompartido'
+import Biblioteca from './ui/Biblioteca'
+import Retos from './ui/Retos'
+import RetoDiario from './ui/RetoDiario'
 import DevApp from './DevApp'
 import type { Sesion, Nivel } from './ui/tipos'
 import { actualizarNivel, alExpirarSesion, borrarToken, obtenerUsuarioActual, type Usuario } from './api/auth'
 
 type Paso = 'intro' | 'auth' | 'encuesta' | 'importar' | 'bienvenida' | 'principal'
+
+// Biblioteca/Retos son alcanzables tanto desde "bienvenida" como desde el
+// workspace activo (VistaPrincipal) — por eso viven en un estado aparte de
+// `paso` en vez de ser un caso más del switch: `pantallaExtra` se revisa
+// ANTES que `sesion`, así que no importa si hay un circuito abierto o no.
 
 // ============================================================
 //  Conmutador raíz:
@@ -28,6 +36,7 @@ function App() {
   // (y de la encuesta de nivel si hace falta), antes de ir a "bienvenida".
   const [tokenCompartido] = useState(() => new URLSearchParams(window.location.search).get('compartido'))
   const [paso, setPaso] = useState<Paso>('intro')
+  const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | null>(null)
   const [nivel, setNivel] = useState<Nivel>('intermedio')
   const [sesion, setSesion] = useState<Sesion | null>(null)
   // Usuario autenticado (nombre/correo) para el panel de cuenta del sidebar.
@@ -87,6 +96,16 @@ function App() {
 
   if (modoDev) return <DevApp onVolver={() => setModoDev(false)} />
 
+  if (pantallaExtra === 'biblioteca') {
+    return <Biblioteca usuario={usuario} onVolver={() => setPantallaExtra(null)} />
+  }
+  if (pantallaExtra === 'retos') {
+    return <Retos onVolver={() => setPantallaExtra(null)} onEmpezarDiario={() => setPantallaExtra('retoDiario')} />
+  }
+  if (pantallaExtra === 'retoDiario') {
+    return <RetoDiario onVolver={() => setPantallaExtra('retos')} />
+  }
+
   if (sesion) return (
     <VistaPrincipal
       key={sesion.id ?? sesion.nombre}
@@ -96,6 +115,8 @@ function App() {
       onCargarSesion={setSesion}
       onCerrarSesion={cerrarSesion}
       onActualizarUsuario={setUsuario}
+      onAbrirBiblioteca={() => setPantallaExtra('biblioteca')}
+      onAbrirRetos={() => setPantallaExtra('retos')}
     />
   )
 
@@ -123,6 +144,8 @@ function App() {
           usuario={usuario}
           onActualizarUsuario={setUsuario}
           onCerrarSesion={cerrarSesion}
+          onAbrirBiblioteca={() => setPantallaExtra('biblioteca')}
+          onAbrirRetos={() => setPantallaExtra('retos')}
         />
       )
   }

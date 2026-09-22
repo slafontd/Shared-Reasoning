@@ -1243,11 +1243,12 @@ async def listar_materiales(
 
 
 @app.get("/materiales/portadas/{material_id}")
-async def portada_material(
-    material_id: str,
-    usuario: Usuario = Depends(obtener_usuario_actual),
-    db: Session = Depends(get_db),
-):
+async def portada_material(material_id: str, db: Session = Depends(get_db)):
+    """Pública a propósito, sin JWT — es solo la miniatura de portada (nunca
+    el archivo real), y así el frontend la usa directo en un <img src> en vez
+    de tener que traerla como blob autenticado y manejar su URL de objeto a
+    mano. El listado que revela qué IDs existen (GET /materiales) sigue
+    protegido; adivinar un UUID de portada al azar no expone nada sensible."""
     material = _buscar_material(db, material_id)
     if material is None or not material.ruta_portada:
         raise HTTPException(status_code=404, detail="Portada no encontrada.")
