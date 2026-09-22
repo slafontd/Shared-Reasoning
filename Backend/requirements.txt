@@ -14,3 +14,4 @@ pyjwt
 pydantic[email]
 cryptography
 httpx
+pymupdf

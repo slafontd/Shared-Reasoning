@@ -71,6 +71,35 @@ class Sesion(Base):
     token_compartido = Column(String(64), unique=True, nullable=True, index=True)
 
 
+class MaterialBiblioteca(Base):
+    """Material de estudio (PDF/libro/guía/datasheet) subido por un usuario a
+    la biblioteca compartida — complementa a `biblioteca_esquematicos.py`
+    (esquemáticos de ejemplo, de solo lectura) con contenido que la comunidad
+    va agregando. Ver materiales.py para la subida/descarga real (Supabase
+    Storage, bucket privado)."""
+    __tablename__ = "materiales_biblioteca"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    titulo = Column(String(200), nullable=False)
+    categoria = Column(String(20), nullable=False)
+    dificultad = Column(String(20), nullable=False)
+    # Rutas DENTRO del bucket privado de Supabase Storage, nunca una URL
+    # pública: el archivo y la portada se sirven proxied desde el propio
+    # backend (GET /materiales/descargar/{id} y /materiales/portadas/{id}),
+    # protegidos por el mismo JWT que el resto de la API — a diferencia de
+    # biblioteca_esquematicos.py, este contenido lo sube cualquier usuario
+    # autenticado, así que no puede vivir en un bucket público.
+    ruta_archivo = Column(String(300), nullable=False)
+    ruta_portada = Column(String(300), nullable=True)
+    subido_por = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class ChatMensaje(Base):
     __tablename__ = "chat_mensajes"
 

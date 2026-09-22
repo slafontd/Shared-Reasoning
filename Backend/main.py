@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +12,11 @@ from agents.verbosidad import normalizar_nivel
 from agents.estado import MensajeChat
 from agents.deteccion_interaccion import diagnosticar_interaccion_inicial
 from db.database import get_db
-from db.models import Usuario, Sesion, ChatMensaje
+from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
+import materiales
+import retos
+from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
+from schemas.retos import RetoDiario
 from auth import (
     RegistroRequest,
     LoginRequest,
@@ -51,6 +55,7 @@ import asyncio
 import json
 import os
 import secrets
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -1122,5 +1127,209 @@ async def chat(
                 _persistir_interaccion_chat(db, sesion, historial_list, resultado, tipo_interaccion, intencion)
             except Exception:
                 db.rollback()
+
+
+# --- Biblioteca de materiales de estudio ---
+# Complementa a /biblioteca-esquematicos (bucket público, solo lectura) con
+# contenido que cualquier usuario autenticado puede subir — ver materiales.py.
+
+def _material_response(m: MaterialBiblioteca) -> MaterialResponse:
+    return MaterialResponse(
+        id=m.id,
+        titulo=m.titulo,
+        categoria=m.categoria,
+        dificultad=m.dificultad,
+        portada_url=f"/materiales/portadas/{m.id}" if m.ruta_portada else None,
+        descarga_url=f"/materiales/descargar/{m.id}",
+        subido_por=m.subido_por,
+        fecha_subida=m.fecha_subida,
+    )
+
+
+def _buscar_material(db: Session, material_id: str) -> MaterialBiblioteca | None:
+    """None tanto si no existe como si `material_id` no tiene formato de UUID
+    válido — mismo criterio que _buscar_sesion_del_usuario."""
+    try:
+        return db.query(MaterialBiblioteca).filter(MaterialBiblioteca.id == material_id).first()
+    except Exception:
+        db.rollback()
+        return None
+
+
+@app.post("/materiales/subir", response_model=MaterialResponse, status_code=201)
+async def subir_material(
+    titulo: str = Form(...),
+    categoria: str = Form(...),
+    dificultad: str = Form(...),
+    archivo: UploadFile = File(...),
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    if not materiales.storage_configurado():
+        raise HTTPException(
+            status_code=503,
+            detail="La biblioteca de materiales no está configurada en este servidor (falta SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY).",
+        )
+    if categoria not in materiales.CATEGORIAS_VALIDAS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Categoría '{categoria}' no válida. Valores válidos: {sorted(materiales.CATEGORIAS_VALIDAS)}",
+        )
+    if dificultad not in materiales.DIFICULTADES_VALIDAS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dificultad '{dificultad}' no válida. Valores válidos: {sorted(materiales.DIFICULTADES_VALIDAS)}",
+        )
+
+    contenido = await archivo.read()
+    if len(contenido) == 0:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    if len(contenido) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 20MB.")
+
+    material_id = uuid.uuid4()
+    extension = os.path.splitext(archivo.filename or "")[1].lower() or ".bin"
+    ruta_archivo = f"archivos/{material_id}{extension}"
+    content_type = archivo.content_type or "application/octet-stream"
+
+    try:
+        await materiales.subir_archivo(ruta_archivo, contenido, content_type)
+    except Exception:
+        raise HTTPException(status_code=502, detail="No se pudo subir el archivo al almacenamiento. Intenta de nuevo.")
+
+    # Portada auto-generada solo para PDFs; si falla no es fatal, el front cae
+    # a un ícono genérico por categoría (ver MaterialResponse.portada_url).
+    ruta_portada = None
+    if extension == ".pdf":
+        portada_bytes = materiales.generar_portada_pdf(contenido)
+        if portada_bytes:
+            ruta_portada_candidata = f"portadas/{material_id}.png"
+            try:
+                await materiales.subir_archivo(ruta_portada_candidata, portada_bytes, "image/png")
+                ruta_portada = ruta_portada_candidata
+            except Exception:
+                ruta_portada = None
+
+    nuevo = MaterialBiblioteca(
+        id=material_id,
+        titulo=titulo,
+        categoria=categoria,
+        dificultad=dificultad,
+        ruta_archivo=ruta_archivo,
+        ruta_portada=ruta_portada,
+        subido_por=usuario.id,
+    )
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+
+    return _material_response(nuevo)
+
+
+@app.get("/materiales", response_model=list[MaterialResponse])
+async def listar_materiales(
+    categoria: str | None = None,
+    dificultad: str | None = None,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    query = db.query(MaterialBiblioteca)
+    if categoria:
+        query = query.filter(MaterialBiblioteca.categoria == categoria)
+    if dificultad:
+        query = query.filter(MaterialBiblioteca.dificultad == dificultad)
+
+    return [_material_response(m) for m in query.order_by(MaterialBiblioteca.fecha_subida.desc()).all()]
+
+
+@app.get("/materiales/portadas/{material_id}")
+async def portada_material(
+    material_id: str,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    material = _buscar_material(db, material_id)
+    if material is None or not material.ruta_portada:
+        raise HTTPException(status_code=404, detail="Portada no encontrada.")
+
+    contenido = await materiales.descargar_archivo(material.ruta_portada)
+    return Response(content=contenido, media_type="image/png")
+
+
+@app.get("/materiales/descargar/{material_id}")
+async def descargar_material(
+    material_id: str,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    material = _buscar_material(db, material_id)
+    if material is None:
+        raise HTTPException(status_code=404, detail="Material no encontrado.")
+
+    contenido = await materiales.descargar_archivo(material.ruta_archivo)
+    extension = os.path.splitext(material.ruta_archivo)[1]
+    media_type = "application/pdf" if extension == ".pdf" else "application/octet-stream"
+
+    return Response(
+        content=contenido,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{material.titulo}{extension}"'},
+    )
+
+
+@app.delete("/materiales/{material_id}", status_code=204)
+async def eliminar_material(
+    material_id: str,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    material = _buscar_material(db, material_id)
+    if material is None:
+        raise HTTPException(status_code=404, detail="Material no encontrado.")
+    if material.subido_por != usuario.id:
+        raise HTTPException(status_code=403, detail="Solo quien subió el material puede eliminarlo.")
+
+    await materiales.borrar_archivo(material.ruta_archivo)
+    if material.ruta_portada:
+        await materiales.borrar_archivo(material.ruta_portada)
+
+    db.delete(material)
+    db.commit()
+
+
+@app.get("/materiales/tutorial/{componente}", response_model=TutorialComponente)
+async def tutorial_componente(
+    componente: str,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+):
+    try:
+        return await materiales.generar_tutorial(componente)
+    except Exception:
+        raise HTTPException(status_code=502, detail="No se pudo generar el tutorial. Intenta de nuevo.")
+
+
+@app.post("/materiales/tutorial-chat")
+async def tutorial_chat(
+    datos: TutorialChatRequest,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+):
+    try:
+        respuesta = await materiales.responder_tutorial_chat(datos.componente, datos.mensaje, datos.historial)
+    except Exception:
+        raise HTTPException(status_code=502, detail="No se pudo responder. Intenta de nuevo.")
+
+    return {"respuesta": respuesta}
+
+
+# --- Retos gamificados ---
+# Sin persistencia propia (ver retos.py) — reusa Usuario.nivel, que ya existe
+# para ajustar la verbosidad del planner/chat.
+
+@app.get("/retos/diario", response_model=RetoDiario)
+async def reto_diario(usuario: Usuario = Depends(obtener_usuario_actual)):
+    try:
+        return await retos.generar_reto_diario(usuario.nivel)
+    except Exception:
+        raise HTTPException(status_code=502, detail="No se pudo generar el reto diario. Intenta de nuevo.")
 
     return StreamingResponse(generador(), media_type="text/event-stream")
