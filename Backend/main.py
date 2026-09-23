@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request, Dep
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
@@ -161,12 +162,20 @@ def _api_keys_configuradas(usuario: Usuario) -> ApiKeysConfiguradas:
     )
 
 
+def _buscar_por_email(db: Session, email: str) -> Usuario | None:
+    """Búsqueda sin distinguir mayúsculas. Los esquemas ya normalizan el email
+    entrante (auth.normalizar_email), pero las cuentas creadas antes de esa
+    normalización pueden tener mayúsculas guardadas — por eso se compara con
+    lower() en la BD y no solo con igualdad."""
+    return db.query(Usuario).filter(func.lower(Usuario.email) == email.lower()).first()
+
+
 @app.post("/auth/registro", response_model=TokenResponse, status_code=201)
 def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get_db)):
     verificar_frecuencia(f"auth:{_ip_de(request)}", FRECUENCIA_AUTH)
     # Verificación previa por email (mensaje claro). La restricción UNIQUE de la
     # BD es la garantía final ante condiciones de carrera.
-    if db.query(Usuario).filter(Usuario.email == datos.email).first():
+    if _buscar_por_email(db, datos.email):
         raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
 
     usuario = Usuario(
@@ -198,10 +207,10 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
 @app.post("/auth/login", response_model=TokenResponse)
 def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
     verificar_frecuencia(f"auth:{_ip_de(request)}", FRECUENCIA_AUTH)
-    usuario = db.query(Usuario).filter(Usuario.email == datos.email).first()
+    usuario = _buscar_por_email(db, datos.email)
     # Mensaje genérico a propósito: no revela si el email existe (evita enumeración).
     if usuario is None or not verificar_contrasena(usuario.contrasena_hash, datos.contrasena):
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas.")
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
     token = crear_token(usuario.id)
     return TokenResponse(
@@ -240,7 +249,8 @@ def actualizar_perfil(
 
     if datos.email is not None and datos.email != usuario.email:
         # Verificación previa por claridad; la restricción UNIQUE es la garantía final.
-        if db.query(Usuario).filter(Usuario.email == datos.email, Usuario.id != usuario.id).first():
+        otro = _buscar_por_email(db, datos.email)
+        if otro is not None and otro.id != usuario.id:
             raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
         usuario.email = datos.email
 

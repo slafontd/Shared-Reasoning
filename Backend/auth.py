@@ -38,6 +38,13 @@ _bearer = HTTPBearer()
 
 # --- Esquemas de request/response ---
 
+def normalizar_email(valor):
+    """Correos sin espacios y en minúsculas: "Ana@EAFIT.edu.co " y
+    "ana@eafit.edu.co" son la misma cuenta. Se aplica ANTES de validar el
+    formato (mode="before"), así el espacio accidental al pegar no da error."""
+    return valor.strip().lower() if isinstance(valor, str) else valor
+
+
 class RegistroRequest(BaseModel):
     nombre: str = Field(min_length=1, max_length=100)
     email: EmailStr
@@ -45,6 +52,8 @@ class RegistroRequest(BaseModel):
     # El máximo evita entradas gigantes que saturen el hashing de Argon2.
     contrasena: str = Field(min_length=12, max_length=128)
     # El nivel NO se pide en el registro: lo decide la encuesta (#72) después.
+
+    _normalizar_email = field_validator("email", mode="before")(normalizar_email)
 
     @field_validator("contrasena")
     @classmethod
@@ -62,7 +71,9 @@ class RegistroRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    contrasena: str
+    contrasena: str = Field(min_length=1, max_length=128)
+
+    _normalizar_email = field_validator("email", mode="before")(normalizar_email)
 
 
 class ApiKeysConfiguradas(BaseModel):
@@ -105,6 +116,8 @@ class PerfilRequest(BaseModel):
     # texto) cubre una foto de unos 350KB antes de la inflación de base64;
     # el front ya valida un límite más chico antes de mandarla.
     foto_perfil: str | None = Field(default=None, max_length=500_000)
+
+    _normalizar_email = field_validator("email", mode="before")(normalizar_email)
 
 
 class ApiKeysRequest(BaseModel):

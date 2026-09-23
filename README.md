@@ -177,6 +177,15 @@ uvicorn main:app --reload
 
 El backend queda en <http://localhost:8000>. La documentación interactiva está en <http://localhost:8000/docs>.
 
+#### Pruebas del backend
+
+Las pruebas (`Backend/tests/`) necesitan una base PostgreSQL **de prueba** aparte — cada prueba vacía las tablas, así que nunca uses la de Supabase:
+
+```bash
+pip install pytest
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/paralelo_test pytest
+```
+
 ### Frontend
 
 ```bash

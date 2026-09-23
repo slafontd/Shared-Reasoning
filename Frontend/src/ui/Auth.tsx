@@ -59,14 +59,14 @@ function Auth({ onEntrar }: Props) {
           {/* Tabs */}
           <div className="flex rounded-full p-1 mb-6" style={{ background: 'var(--bg1)' }}>
             <button
-              onClick={() => setTab('login')}
+              onClick={() => { setTab('login'); setError('') }}
               className="flex-1 py-2 rounded-full text-sm font-semibold transition"
               style={tab === 'login' ? { background: 'var(--accent)', color: 'var(--bg2)' } : { color: 'var(--ink-soft)' }}
             >
               Iniciar sesión
             </button>
             <button
-              onClick={() => setTab('registro')}
+              onClick={() => { setTab('registro'); setError('') }}
               className="flex-1 py-2 rounded-full text-sm font-semibold transition"
               style={tab === 'registro' ? { background: 'var(--accent)', color: 'var(--bg2)' } : { color: 'var(--ink-soft)' }}
             >
@@ -86,6 +86,7 @@ function Auth({ onEntrar }: Props) {
                 <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Nombre</label>
                 <input
                   type="text"
+                  autoComplete="name"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
                   className={inputClass}
@@ -97,6 +98,7 @@ function Auth({ onEntrar }: Props) {
               <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Correo Electrónico</label>
               <input
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputClass}
@@ -108,6 +110,7 @@ function Auth({ onEntrar }: Props) {
               <div className="relative">
                 <input
                   type={verPassword ? 'text' : 'password'}
+                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={`${inputClass} pr-11`}
@@ -133,7 +136,8 @@ function Auth({ onEntrar }: Props) {
             {error && (
               <div
                 className="rounded-xl px-3 py-2 text-sm flex items-start gap-2"
-                style={{ background: 'rgba(220,38,38,.12)', border: '1px solid rgba(220,38,38,.4)', color: '#fca5a5' }}
+                role="alert"
+                style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.4)', color: '#b91c1c' }}
               >
                 <span>⚠️</span><span className="whitespace-pre-line">{error}</span>
               </div>
