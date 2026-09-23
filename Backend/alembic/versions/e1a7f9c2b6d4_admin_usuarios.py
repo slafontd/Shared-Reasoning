@@ -7,7 +7,7 @@ antes y se quitó (ver b8f4c1a6e2d7) cuando dejó de tener uso — ahora hace
 falta de nuevo para restringir /admin/usuarios a administradores.
 
 Revision ID: e1a7f9c2b6d4
-Revises: 7c3e9a2d4f10
+Revises: b63d0a399c7e
 Create Date: 2026-09-23 00:00:00.000000
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = 'e1a7f9c2b6d4'
-down_revision: Union[str, None] = '7c3e9a2d4f10'
+down_revision: Union[str, None] = 'b63d0a399c7e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
