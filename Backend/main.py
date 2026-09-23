@@ -1201,6 +1201,8 @@ async def chat(
             except Exception:
                 db.rollback()
 
+    return StreamingResponse(generador(), media_type="text/event-stream")
+
 
 # --- Biblioteca de materiales de estudio ---
 # Complementa a /biblioteca-esquematicos (bucket público, solo lectura) con
@@ -1405,5 +1407,3 @@ async def reto_diario(usuario: Usuario = Depends(obtener_usuario_actual)):
         return await retos.generar_reto_diario(usuario.nivel)
     except Exception:
         raise HTTPException(status_code=502, detail="No se pudo generar el reto diario. Intenta de nuevo.")
-
-    return StreamingResponse(generador(), media_type="text/event-stream")
