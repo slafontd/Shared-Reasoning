@@ -8,13 +8,14 @@ import ImportarCompartido from './ui/ImportarCompartido'
 import Biblioteca from './ui/Biblioteca'
 import Retos from './ui/Retos'
 import RetoDiario from './ui/RetoDiario'
+import Cursos from './ui/Cursos'
 import DevApp from './DevApp'
 import type { Sesion, Nivel } from './ui/tipos'
 import { actualizarNivel, alExpirarSesion, borrarToken, obtenerUsuarioActual, type Usuario } from './api/auth'
 
 type Paso = 'intro' | 'auth' | 'encuesta' | 'importar' | 'bienvenida' | 'principal'
 
-// Biblioteca/Retos son alcanzables tanto desde "bienvenida" como desde el
+// Biblioteca/Retos/Cursos son alcanzables tanto desde "bienvenida" como desde el
 // workspace activo (VistaPrincipal) — por eso viven en un estado aparte de
 // `paso` en vez de ser un caso más del switch: `pantallaExtra` se revisa
 // ANTES que `sesion`, así que no importa si hay un circuito abierto o no.
@@ -36,7 +37,7 @@ function App() {
   // (y de la encuesta de nivel si hace falta), antes de ir a "bienvenida".
   const [tokenCompartido] = useState(() => new URLSearchParams(window.location.search).get('compartido'))
   const [paso, setPaso] = useState<Paso>('intro')
-  const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | null>(null)
+  const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | 'cursos' | null>(null)
   const [nivel, setNivel] = useState<Nivel>('intermedio')
   const [sesion, setSesion] = useState<Sesion | null>(null)
   // Usuario autenticado (nombre/correo) para el panel de cuenta del sidebar.
@@ -105,6 +106,9 @@ function App() {
   if (pantallaExtra === 'retoDiario') {
     return <RetoDiario onVolver={() => setPantallaExtra('retos')} />
   }
+  if (pantallaExtra === 'cursos') {
+    return <Cursos onVolver={() => setPantallaExtra(null)} />
+  }
 
   if (sesion) return (
     <VistaPrincipal
@@ -117,6 +121,7 @@ function App() {
       onActualizarUsuario={setUsuario}
       onAbrirBiblioteca={() => setPantallaExtra('biblioteca')}
       onAbrirRetos={() => setPantallaExtra('retos')}
+      onAbrirCursos={() => setPantallaExtra('cursos')}
     />
   )
 
@@ -146,6 +151,7 @@ function App() {
           onCerrarSesion={cerrarSesion}
           onAbrirBiblioteca={() => setPantallaExtra('biblioteca')}
           onAbrirRetos={() => setPantallaExtra('retos')}
+          onAbrirCursos={() => setPantallaExtra('cursos')}
         />
       )
   }

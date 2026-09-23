@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, History, PanelLeft, ArrowLeft, ArrowRight,
   Eye, EyeOff, User, LayoutGrid, ChevronDown, X, Settings, LogOut, Share2,
-  BookOpen, Trophy,
+  BookOpen, Trophy, GraduationCap,
 } from 'lucide-react'
 import Protoboard from '../components/Protoboard'
 import ComponentGallery from '../components/ComponentGallery'
@@ -33,6 +33,7 @@ type Props = {
   onActualizarUsuario: (u: Usuario) => void
   onAbrirBiblioteca: () => void
   onAbrirRetos: () => void
+  onAbrirCursos: () => void
 }
 
 const NOMBRE_NIVEL: Record<Sesion['nivel'], string> = { basico: 'Básico', intermedio: 'Intermedio', experto: 'Experto' }
@@ -340,7 +341,7 @@ function PanelMetricas({ metricasProceso, usoChat, resumenSesion }: {
 // y barra de estadísticas abajo.
 function VistaPrincipal({
   sesion, usuario, onNuevo, onCargarSesion, onCerrarSesion, onActualizarUsuario,
-  onAbrirBiblioteca, onAbrirRetos,
+  onAbrirBiblioteca, onAbrirRetos, onAbrirCursos,
 }: Props) {
   const [instrucciones, setInstrucciones] = useState(sesion.instrucciones)
   // Netlist VIGENTE del circuito. Se siembra con el de la sesión, igual que
@@ -751,13 +752,16 @@ function VistaPrincipal({
           >
             <History size={18} />
           </button>
-          {/* 4º/5º: biblioteca de materiales y retos (pantallas aparte, ver App.tsx) */}
+          {/* 4º/5º/6º: biblioteca de materiales, retos y cursos (pantallas aparte, ver App.tsx) */}
           <span className="w-6 h-px my-1" style={{ background: 'var(--border)' }} />
           <button onClick={onAbrirBiblioteca} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Biblioteca de materiales">
             <BookOpen size={18} />
           </button>
           <button onClick={onAbrirRetos} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Retos">
             <Trophy size={18} />
+          </button>
+          <button onClick={onAbrirCursos} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Cursos">
+            <GraduationCap size={18} />
           </button>
         </div>
 

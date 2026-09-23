@@ -130,6 +130,7 @@ Paralelo/
 │   ├── biblioteca_esquematicos.py     # esquemáticos de ejemplo (Supabase Storage, bucket público)
 │   ├── materiales.py                  # biblioteca de materiales subidos por usuarios (Supabase Storage, bucket privado)
 │   ├── retos.py                       # reto diario gamificado
+│   ├── cursos.py                      # cursos: crear y consultar (US08/US09)
 │   └── main.py                        # aplicación FastAPI (endpoints)
 └── Frontend/
     └── src/
@@ -252,6 +253,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `POST` `GET` `DELETE` | `/materiales/subir` · `/materiales` · `/materiales/{id}` | Subir, listar y eliminar materiales de la biblioteca. |
 | `GET` | `/materiales/portadas/{id}` · `/materiales/descargar/{id}` | Portada (pública) · archivo (requiere JWT). |
 | `GET` `POST` | `/materiales/tutorial/{componente}` · `/materiales/tutorial-chat` | Tutorial de IA por componente · chat de seguimiento. |
+| `POST` | `/cursos` | Crear un curso (nombre, código opcional, descripción opcional). |
 | `GET` | `/retos/diario` | Reto diario gamificado, generado por IA según el nivel del usuario. |
 
 Todos los endpoints (excepto registro/login y los públicos de arriba) requieren un token JWT en el header `Authorization: Bearer <token>`.

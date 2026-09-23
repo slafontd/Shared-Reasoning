@@ -16,6 +16,7 @@ from db.database import get_db
 from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
+import cursos
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
 from schemas.retos import RetoDiario
 from auth import (
@@ -83,6 +84,8 @@ app.add_middleware(
 TIPOS_IMAGEN_VALIDOS = ["image/jpeg", "image/png", "image/webp", "image/tiff", "image/heic"]
 
 metricas = Metricas()
+
+app.include_router(cursos.router)
 
 
 @app.exception_handler(RequestValidationError)

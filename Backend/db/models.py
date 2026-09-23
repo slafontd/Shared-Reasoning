@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 from db.database import Base
@@ -116,3 +117,28 @@ class ChatMensaje(Base):
     modo_detectado = Column(String(20))
     # Indexado porque el historial se consulta ordenado cronológicamente.
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class Curso(Base):
+    """Curso creado por un usuario (US08, #11). Por ahora cualquier usuario
+    autenticado puede crear cursos: la gestión de roles (US06, #8) decidirá
+    más adelante quién puede hacerlo (p. ej. solo docentes)."""
+    __tablename__ = "cursos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nombre = Column(String(150), nullable=False)
+    # Código de la materia en el sistema académico (ej. "ST0263"). Opcional:
+    # no todos los cursos del programa corresponden a una materia formal.
+    codigo = Column(String(20), nullable=True)
+    descripcion = Column(Text, nullable=True)
+    # Si se borra el usuario creador, se borran sus cursos (mismo criterio que
+    # Sesion y MaterialBiblioteca).
+    creado_por = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    creador = relationship("Usuario", lazy="joined")
