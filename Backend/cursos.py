@@ -1,4 +1,4 @@
-"""Cursos (US08 crear, #11 · US09 consultar, #12).
+"""Cursos (US08 crear, #11 · US09 consultar, #12 · US11 eliminar).
 
 Router aparte de main.py para no seguir engordando ese archivo; se monta con
 app.include_router(cursos.router).
@@ -112,3 +112,22 @@ def obtener_curso(
     if curso is None:
         raise HTTPException(status_code=404, detail="Curso no encontrado.")
     return a_respuesta(curso)
+
+
+@router.delete("/{curso_id}", status_code=204)
+def eliminar_curso(
+    curso_id: UUID,
+    # Mismo permiso base que crear (US06): un estudiante no llega ni a este
+    # punto. Dentro de eso, un profesor solo puede eliminar los cursos que
+    # él mismo creó — un administrador puede eliminar cualquiera (US11, #14).
+    usuario: Usuario = Depends(requerir_rol(ADMINISTRADOR, PROFESOR)),
+    db: Session = Depends(get_db),
+):
+    curso = db.get(Curso, curso_id)
+    if curso is None:
+        raise HTTPException(status_code=404, detail="Curso no encontrado.")
+    if usuario.rol == PROFESOR and curso.creado_por != usuario.id:
+        raise HTTPException(status_code=403, detail="Solo puedes eliminar los cursos que tú creaste.")
+
+    db.delete(curso)
+    db.commit()

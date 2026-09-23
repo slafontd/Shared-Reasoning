@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2 } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
-import { crearCurso, listarCursos, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
+import { crearCurso, listarCursos, eliminarCurso, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
 import type { Usuario } from '../api/auth'
 
 type Props = {
@@ -27,6 +27,14 @@ function Cursos({ usuario, onVolver }: Props) {
   // restringe (cursos.crear_curso), esto solo evita ofrecer un botón que
   // terminaría en un 403 para un estudiante.
   const puedeCrear = usuario?.rol === 'administrador' || usuario?.rol === 'profesor'
+  // US11 (#14): un administrador puede eliminar cualquier curso; un
+  // profesor, solo los que él mismo creó — mismo criterio que ya aplica el
+  // backend (cursos.eliminar_curso), esto solo evita ofrecer un botón que
+  // terminaría en un 403.
+  function puedeEliminar(curso: Curso): boolean {
+    if (usuario?.rol === 'administrador') return true
+    return usuario?.rol === 'profesor' && curso.creadoPor === usuario.usuarioId
+  }
   const [cursos, setCursos] = useState<Curso[]>([])
   const [modalAbierto, setModalAbierto] = useState(false)
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
@@ -77,6 +85,21 @@ function Cursos({ usuario, onVolver }: Props) {
     setCursos((actuales) => [curso, ...actuales])
     setRecienCreado(curso)
     setModalAbierto(false)
+  }
+
+  // US11 (#14): pide confirmación antes de eliminar, y el curso deja de
+  // estar disponible de inmediato (se saca de la lista sin esperar a un
+  // refetch) — el DELETE ya fue exitoso en el backend cuando esto corre.
+  async function eliminar(curso: Curso) {
+    if (!confirm(`¿Eliminar el curso "${curso.nombre}"? Esta acción no se puede deshacer.`)) return
+    setError(null)
+    try {
+      await eliminarCurso(curso.id)
+      setCursos((actuales) => actuales.filter((c) => c.id !== curso.id))
+      setSeleccionado(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el curso.')
+    }
   }
 
   return (
@@ -160,7 +183,15 @@ function Cursos({ usuario, onVolver }: Props) {
         ) : (
           <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cursos.map((c) => <TarjetaCurso key={c.id} curso={c} onAbrir={() => setSeleccionado(c)} />)}
+              {cursos.map((c) => (
+                <TarjetaCurso
+                  key={c.id}
+                  curso={c}
+                  onAbrir={() => setSeleccionado(c)}
+                  puedeEliminar={puedeEliminar(c)}
+                  onEliminar={() => eliminar(c)}
+                />
+              ))}
             </div>
             {hayMas && (
               <div className="flex justify-center">
@@ -179,7 +210,14 @@ function Cursos({ usuario, onVolver }: Props) {
       </main>
 
       {modalAbierto && <ModalCrearCurso onCerrar={() => setModalAbierto(false)} onCreado={alCrear} />}
-      {seleccionado && <ModalDetalleCurso curso={seleccionado} onCerrar={() => setSeleccionado(null)} />}
+      {seleccionado && (
+        <ModalDetalleCurso
+          curso={seleccionado}
+          onCerrar={() => setSeleccionado(null)}
+          puedeEliminar={puedeEliminar(seleccionado)}
+          onEliminar={() => eliminar(seleccionado)}
+        />
+      )}
     </TemaProvider>
   )
 }
@@ -196,24 +234,46 @@ function EtiquetaCodigo({ codigo }: { codigo: string }) {
   )
 }
 
-function TarjetaCurso({ curso, onAbrir }: { curso: Curso; onAbrir: () => void }) {
+function TarjetaCurso({ curso, onAbrir, puedeEliminar, onEliminar }: {
+  curso: Curso
+  onAbrir: () => void
+  puedeEliminar: boolean
+  onEliminar: () => void
+}) {
   return (
-    <button onClick={onAbrir} className="panel rounded-2xl p-5 flex flex-col justify-start gap-2 text-left hover:-translate-y-0.5 transition">
-      <div className="flex items-start gap-2">
-        <h2 className="font-semibold flex-1 break-words">{curso.nombre}</h2>
-        {curso.codigo && <EtiquetaCodigo codigo={curso.codigo} />}
-      </div>
-      {curso.descripcion && (
-        <p className="text-sm line-clamp-3 whitespace-pre-line" style={{ color: 'var(--ink-soft)' }}>{curso.descripcion}</p>
+    <div className="panel rounded-2xl p-5 flex flex-col justify-start gap-2 text-left hover:-translate-y-0.5 transition relative group">
+      {puedeEliminar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onEliminar() }}
+          className="absolute top-3 right-3 grid place-items-center w-7 h-7 rounded-lg opacity-0 group-hover:opacity-100 transition hover:bg-black/5"
+          style={{ color: '#dc2626' }}
+          title="Eliminar curso"
+        >
+          <Trash2 size={14} />
+        </button>
       )}
-      <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-        Creado por {curso.creadoPorNombre} · {fechaLegible(curso.fechaCreacion)}
-      </p>
-    </button>
+      <button onClick={onAbrir} className="flex flex-col gap-2 text-left">
+        <div className="flex items-start gap-2 pr-7">
+          <h2 className="font-semibold flex-1 break-words">{curso.nombre}</h2>
+          {curso.codigo && <EtiquetaCodigo codigo={curso.codigo} />}
+        </div>
+        {curso.descripcion && (
+          <p className="text-sm line-clamp-3 whitespace-pre-line" style={{ color: 'var(--ink-soft)' }}>{curso.descripcion}</p>
+        )}
+        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+          Creado por {curso.creadoPorNombre} · {fechaLegible(curso.fechaCreacion)}
+        </p>
+      </button>
+    </div>
   )
 }
 
-function ModalDetalleCurso({ curso, onCerrar }: { curso: Curso; onCerrar: () => void }) {
+function ModalDetalleCurso({ curso, onCerrar, puedeEliminar, onEliminar }: {
+  curso: Curso
+  onCerrar: () => void
+  puedeEliminar: boolean
+  onEliminar: () => void
+}) {
   useEffect(() => {
     const alTeclear = (e: KeyboardEvent) => e.key === 'Escape' && onCerrar()
     window.addEventListener('keydown', alTeclear)
@@ -246,6 +306,16 @@ function ModalDetalleCurso({ curso, onCerrar }: { curso: Curso; onCerrar: () => 
         <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
           Creado por {curso.creadoPorNombre} el {fechaLegible(curso.fechaCreacion)}
         </p>
+        {puedeEliminar && (
+          <button
+            onClick={onEliminar}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition hover:bg-black/5"
+            style={{ color: '#dc2626', border: '1px solid rgba(220,38,38,.4)' }}
+          >
+            <Trash2 size={13} />
+            Eliminar curso
+          </button>
+        )}
       </div>
     </div>
   )

@@ -2,7 +2,8 @@ import { fetchAutenticado } from './auth'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-// Cursos (US08 crear, #11 · US09 consultar, #12) — ver Backend/cursos.py.
+// Cursos (US08 crear, #11 · US09 consultar, #12 · US11 eliminar, #14) —
+// ver Backend/cursos.py.
 export type Curso = {
   id: string
   nombre: string
@@ -60,4 +61,12 @@ export async function listarCursos(opciones: { busqueda?: string; desplazamiento
   const res = await fetchAutenticado(`${API_URL}/cursos?${params}`)
   if (!res.ok) throw new Error(await mensajeDeError(res))
   return ((await res.json()) as CursoAPI[]).map(aCurso)
+}
+
+// US11 (#14): el backend ya valida que solo pueda hacerlo quien creó el
+// curso o un administrador (cursos.eliminar_curso) — este llamado puede
+// devolver 403 si el usuario no tiene permiso sobre ESE curso en particular.
+export async function eliminarCurso(id: string): Promise<void> {
+  const res = await fetchAutenticado(`${API_URL}/cursos/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
 }
