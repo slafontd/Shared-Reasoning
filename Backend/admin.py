@@ -64,6 +64,11 @@ def crear_usuario(datos: AdminUsuarioCrear, db: Session = Depends(get_db)):
         nivel=datos.nivel,
         nivel_confirmado=True,  # lo crea un admin, no pasa por la encuesta de nivel
         es_admin=datos.es_admin,
+        # Verificación de correo (ver auth.py): un admin ya está dando fe de la
+        # cuenta al crearla a mano, así que no tiene sentido pedirle además que
+        # confirme un código que este endpoint ni siquiera genera — de lo
+        # contrario la cuenta quedaría creada pero sin forma de iniciar sesión.
+        email_verificado=True,
     )
     db.add(usuario)
     try:
