@@ -35,6 +35,7 @@ from auth import (
     DOMINIOS_INSTITUCIONALES,
     es_correo_institucional,
     rol_inicial,
+    generar_codigo_verificacion,
     hashear_contrasena,
     verificar_contrasena,
     crear_token,
