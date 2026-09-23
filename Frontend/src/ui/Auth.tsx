@@ -1,8 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import TemaProvider from './theme'
 import { LogoWordmark } from './Logo'
-import { registrar, login, type Usuario } from '../api/auth'
+import {
+  registrar,
+  login,
+  obtenerDominiosPermitidos,
+  esCorreoInstitucional,
+  textoDominios,
+  type Usuario,
+} from '../api/auth'
 
 type Props = { onEntrar: (usuario: Usuario) => void }
 
@@ -15,6 +22,12 @@ function Auth({ onEntrar }: Props) {
   const [verPassword, setVerPassword] = useState(false)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
+  // Dominios de correo institucional aceptados en el registro (US01, #2).
+  const [dominios, setDominios] = useState<string[]>(['eafit.edu.co'])
+
+  useEffect(() => {
+    obtenerDominiosPermitidos().then(setDominios)
+  }, [])
 
   const inputClass =
     'w-full rounded-xl px-4 py-3 text-sm outline-none transition'
@@ -28,6 +41,12 @@ function Auth({ onEntrar }: Props) {
     }
     if (tab === 'registro' && !nombre.trim()) {
       setError('Completa tu nombre.')
+      return
+    }
+    // Solo en el registro: las cuentas antiguas con correo personal pueden
+    // seguir entrando (el login no filtra por dominio).
+    if (tab === 'registro' && !esCorreoInstitucional(email, dominios)) {
+      setError(`Usa tu correo institucional (${textoDominios(dominios)}).`)
       return
     }
 
@@ -99,11 +118,17 @@ function Auth({ onEntrar }: Props) {
               <input
                 type="email"
                 autoComplete="email"
+                placeholder={tab === 'registro' ? `tu.nombre@${dominios[0]}` : undefined}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputClass}
                 style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
               />
+              {tab === 'registro' && (
+                <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                  Usa tu correo institucional ({textoDominios(dominios)}).
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Contraseña</label>

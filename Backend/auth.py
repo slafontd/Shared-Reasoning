@@ -35,8 +35,31 @@ _hasher = PasswordHasher()
 # Lee el header "Authorization: Bearer <token>".
 _bearer = HTTPBearer()
 
+# US01 (#2): solo se aceptan cuentas con correo institucional. Lista separada
+# por comas en el .env para poder sumar dominios (p. ej. otra universidad del
+# Programa Delfín) sin tocar código. También se aceptan sus subdominios
+# ("est.eafit.edu.co" entra con "eafit.edu.co").
+DOMINIOS_INSTITUCIONALES = [
+    d.strip().lower().lstrip("@")
+    for d in os.getenv("DOMINIOS_INSTITUCIONALES", "eafit.edu.co").split(",")
+    if d.strip()
+]
+
 
 # --- Esquemas de request/response ---
+
+def es_correo_institucional(email: str) -> bool:
+    dominio = email.rsplit("@", 1)[-1].lower()
+    return any(dominio == d or dominio.endswith("." + d) for d in DOMINIOS_INSTITUCIONALES)
+
+
+def validar_correo_institucional(email):
+    """Validador de pydantic (mode="after", el formato ya está validado)."""
+    if email is not None and not es_correo_institucional(email):
+        permitidos = ", ".join("@" + d for d in DOMINIOS_INSTITUCIONALES)
+        raise ValueError(f"Usa tu correo institucional ({permitidos}).")
+    return email
+
 
 def normalizar_email(valor):
     """Correos sin espacios y en minúsculas: "Ana@EAFIT.edu.co " y
@@ -54,6 +77,7 @@ class RegistroRequest(BaseModel):
     # El nivel NO se pide en el registro: lo decide la encuesta (#72) después.
 
     _normalizar_email = field_validator("email", mode="before")(normalizar_email)
+    _email_institucional = field_validator("email")(validar_correo_institucional)
 
     @field_validator("contrasena")
     @classmethod
@@ -118,6 +142,9 @@ class PerfilRequest(BaseModel):
     foto_perfil: str | None = Field(default=None, max_length=500_000)
 
     _normalizar_email = field_validator("email", mode="before")(normalizar_email)
+    # El dominio institucional NO se valida aquí sino en PATCH /auth/perfil y
+    # solo si el correo cambia: el front siempre manda el email, y una cuenta
+    # antigua con correo personal no podría ni cambiar su nombre.
 
 
 class ApiKeysRequest(BaseModel):
