@@ -6,6 +6,8 @@ existir sin hashing ni sin un secreto bien gestionado.
 """
 
 import os
+import random
+import string
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -66,7 +68,7 @@ def es_email_admin(email: str) -> bool:
 
 def es_correo_institucional(email: str) -> bool:
     dominio = email.rsplit("@", 1)[-1].lower()
-    return any(dominio == d or dominio.endswith("." + d) for d in DOMINIOS_INSTITUCIONALES)
+    return any(dominio == d.lower() for d in DOMINIOS_INSTITUCIONALES)
 
 
 def validar_correo_institucional(email):
@@ -114,6 +116,7 @@ class LoginRequest(BaseModel):
     contrasena: str = Field(min_length=1, max_length=128)
 
     _normalizar_email = field_validator("email", mode="before")(normalizar_email)
+    _email_institucional = field_validator("email")(validar_correo_institucional)
 
 
 class ApiKeysConfiguradas(BaseModel):
@@ -125,12 +128,20 @@ class ApiKeysConfiguradas(BaseModel):
     nvidia: bool = False
 
 
+class RegistroResponse(BaseModel):
+    email: str
+    email_verificado: bool = False
+    codigo_verificacion: str | None = None
+    mensaje: str = "Cuenta creada. Verifica tu correo para activar la cuenta."
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     usuario_id: str
     nombre: str
     email: str
+    email_verificado: bool = False
     nivel: str
     nivel_confirmado: bool
     foto_perfil: str | None = None
@@ -144,6 +155,7 @@ class UsuarioResponse(BaseModel):
     usuario_id: str
     nombre: str
     email: str
+    email_verificado: bool = False
     nivel: str
     nivel_confirmado: bool
     foto_perfil: str | None = None
@@ -202,7 +214,11 @@ class NivelResponse(BaseModel):
     nivel_confirmado: bool
 
 
-# --- Hashing de contraseñas (Argon2) ---
+# --- Hashing de contraseñas (Argon2) y verificación de email ---
+
+def generar_codigo_verificacion() -> str:
+    return "".join(random.choice(string.digits) for _ in range(6))
+
 
 def hashear_contrasena(contrasena: str) -> str:
     return _hasher.hash(contrasena)
@@ -264,6 +280,11 @@ def obtener_usuario_actual(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tu cuenta fue desactivada. Contacta a un administrador.",
+        )
+    if not usuario.email_verificado:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes verificar tu correo antes de utilizar la cuenta.",
         )
     return usuario
 

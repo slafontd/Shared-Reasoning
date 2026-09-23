@@ -13,6 +13,8 @@ class Usuario(Base):
     nombre = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     contrasena_hash = Column(String(255), nullable=False)
+    email_verificado = Column(Boolean, nullable=False, default=False)
+    codigo_verificacion = Column(String(20), nullable=True)
     nivel = Column(String(20), nullable=False, default="basico")
     # True solo cuando el usuario completó la encuesta de nivel (#72). Distingue
     # "aún no contestó" de "contestó y su respuesta fue básico" — ambos casos

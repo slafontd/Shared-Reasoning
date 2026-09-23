@@ -12,8 +12,9 @@ def test_registro_con_correo_institucional_crea_la_cuenta(cliente):
     assert respuesta.json()["access_token"]
 
 
-def test_se_aceptan_subdominios_institucionales(cliente):
-    assert registrar(cliente, email="ana@est.eafit.edu.co").status_code == 201
+def test_no_se_aceptan_subdominios_institucionales(cliente):
+    respuesta = registrar(cliente, email="ana@est.eafit.edu.co")
+    assert respuesta.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -21,8 +22,9 @@ def test_se_aceptan_subdominios_institucionales(cliente):
     [
         "ana@gmail.com",
         "ana@hotmail.com",
-        "ana@eafit.edu.co.hacker.com",  # el dominio debe TERMINAR en el institucional
-        "ana@noeafit.edu.co",           # ni ser un dominio que solo lo contiene
+        "ana@eafit.edu.co.hacker.com",
+        "ana@noeafit.edu.co",
+        "ana@est.eafit.edu.co",
     ],
 )
 def test_registro_con_correo_no_institucional_se_rechaza(cliente, email):
@@ -66,9 +68,8 @@ def test_dominios_permitidos_es_publico(cliente):
     assert respuesta.json() == {"dominios": ["eafit.edu.co"]}
 
 
-def test_cuenta_antigua_con_correo_personal_sigue_funcionando(cliente):
-    # Cuentas creadas antes de US01: pueden entrar y editar su nombre sin
-    # que se les exija cambiar el correo (el front siempre manda el email).
+def test_cuenta_antigua_con_correo_personal_no_puede_iniciar_sesion(cliente):
+    # El acceso también exige un correo institucional, aunque la cuenta sea antigua.
     from auth import hashear_contrasena
     from db.database import SessionLocal
     from db.models import Usuario
@@ -78,8 +79,4 @@ def test_cuenta_antigua_con_correo_personal_sigue_funcionando(cliente):
         db.commit()
 
     login = cliente.post("/auth/login", json={"email": "antiguo@gmail.com", "contrasena": CONTRASENA_VALIDA})
-    assert login.status_code == 200
-    cabeceras = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    respuesta = cliente.patch("/auth/perfil", json={"nombre": "Nuevo nombre", "email": "antiguo@gmail.com"}, headers=cabeceras)
-    assert respuesta.status_code == 200
-    assert respuesta.json()["nombre"] == "Nuevo nombre"
+    assert login.status_code == 422

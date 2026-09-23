@@ -46,6 +46,13 @@ def test_correo_inexistente_da_el_mismo_mensaje_que_contrasena_incorrecta(client
     assert respuesta.json()["detail"] == "Correo o contraseña incorrectos."
 
 
+def test_login_rechaza_correo_no_institucional(cliente):
+    respuesta = cliente.post("/auth/login", json={"email": "nadie@gmail.com", "contrasena": CONTRASENA_VALIDA})
+
+    assert respuesta.status_code == 422
+    assert "correo institucional" in respuesta.json()["detail"][0]["msg"]
+
+
 def test_campos_vacios_dan_422(cliente):
     respuesta = cliente.post("/auth/login", json={"email": "", "contrasena": ""})
     assert respuesta.status_code == 422

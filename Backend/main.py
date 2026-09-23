@@ -23,6 +23,7 @@ from schemas.retos import RetoDiario
 from auth import (
     RegistroRequest,
     LoginRequest,
+    RegistroResponse,
     TokenResponse,
     NivelRequest,
     NivelResponse,
@@ -188,7 +189,7 @@ def _buscar_por_email(db: Session, email: str) -> Usuario | None:
     return db.query(Usuario).filter(func.lower(Usuario.email) == email.lower()).first()
 
 
-@app.post("/auth/registro", response_model=TokenResponse, status_code=201)
+@app.post("/auth/registro", response_model=RegistroResponse, status_code=201)
 def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get_db)):
     verificar_frecuencia(f"auth:{_ip_de(request)}", FRECUENCIA_AUTH)
     # Verificación previa por email (mensaje claro). La restricción UNIQUE de la
@@ -196,6 +197,7 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
     if _buscar_por_email(db, datos.email):
         raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
 
+    codigo = generar_codigo_verificacion()
     usuario = Usuario(
         nombre=datos.nombre,
         email=datos.email,
@@ -204,6 +206,8 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         # registro (ver auth.es_email_admin) — es la única vía automática,
         # cualquier otra promoción pasa por PATCH /admin/usuarios/{id}.
         es_admin=es_email_admin(datos.email),
+        email_verificado=False,
+        codigo_verificacion=codigo,
     )
     db.add(usuario)
     try:
@@ -213,17 +217,11 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
     db.refresh(usuario)
 
-    token = crear_token(usuario.id)
-    return TokenResponse(
-        access_token=token,
-        usuario_id=str(usuario.id),
-        nombre=usuario.nombre,
+    return RegistroResponse(
         email=usuario.email,
-        nivel=usuario.nivel,
-        nivel_confirmado=usuario.nivel_confirmado,
-        foto_perfil=usuario.foto_perfil,
-        api_keys_configuradas=_api_keys_configuradas(usuario),
-        es_admin=usuario.es_admin,
+        email_verificado=False,
+        codigo_verificacion=usuario.codigo_verificacion,
+        mensaje="Cuenta creada. Verifica tu correo para activar la cuenta.",
     )
 
 
@@ -239,6 +237,8 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
     # usuario desactivado podría volver a loguearse y sacar un JWT nuevo.
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="Tu cuenta fue desactivada. Contacta a un administrador.")
+    if not usuario.email_verificado:
+        raise HTTPException(status_code=403, detail="Debes verificar tu correo antes de iniciar sesión.")
 
     token = crear_token(usuario.id)
     return TokenResponse(
@@ -246,6 +246,7 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
         usuario_id=str(usuario.id),
         nombre=usuario.nombre,
         email=usuario.email,
+        email_verificado=usuario.email_verificado,
         nivel=usuario.nivel,
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
@@ -254,12 +255,35 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.post("/auth/verificar-email")
+def verificar_email(datos: dict, db: Session = Depends(get_db)):
+    email = (datos.get("email") or "").strip().lower()
+    codigo = (datos.get("codigo") or "").strip()
+    if not email or not codigo:
+        raise HTTPException(status_code=422, detail="Falta el email o el código de verificación.")
+
+    usuario = _buscar_por_email(db, email)
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="No existe una cuenta con este correo.")
+    if usuario.email_verificado:
+        return {"email": usuario.email, "email_verificado": True, "mensaje": "La cuenta ya estaba verificada."}
+    if usuario.codigo_verificacion != codigo:
+        raise HTTPException(status_code=400, detail="El código de verificación es incorrecto.")
+
+    usuario.email_verificado = True
+    usuario.codigo_verificacion = None
+    db.commit()
+    db.refresh(usuario)
+    return {"email": usuario.email, "email_verificado": True, "mensaje": "Correo verificado correctamente."}
+
+
 @app.get("/auth/me", response_model=UsuarioResponse)
 def usuario_actual(usuario: Usuario = Depends(obtener_usuario_actual)):
     return UsuarioResponse(
         usuario_id=str(usuario.id),
         nombre=usuario.nombre,
         email=usuario.email,
+        email_verificado=usuario.email_verificado,
         nivel=usuario.nivel,
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
