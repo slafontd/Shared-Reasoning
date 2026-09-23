@@ -21,6 +21,9 @@ export type Usuario = {
   // subida. null/undefined = sin foto, se muestra la inicial del nombre.
   fotoPerfil?: string | null
   apiKeysConfiguradas: ApiKeysConfiguradas
+  // Gestión de usuarios: solo decide si el front muestra el acceso a
+  // /admin — la restricción real la hace el backend (requerir_admin).
+  esAdmin: boolean
 }
 
 // Callback opcional que App.tsx registra para reaccionar cuando el token
@@ -65,6 +68,7 @@ type RespuestaToken = {
   nivel_confirmado: boolean
   foto_perfil?: string | null
   api_keys_configuradas: ApiKeysConfiguradas
+  es_admin: boolean
 }
 
 function aUsuario(datos: RespuestaToken): Usuario {
@@ -82,6 +86,7 @@ function aUsuarioDesde(datos: RespuestaUsuario): Usuario {
     nivelConfirmado: datos.nivel_confirmado,
     fotoPerfil: datos.foto_perfil,
     apiKeysConfiguradas: datos.api_keys_configuradas,
+    esAdmin: datos.es_admin,
   }
 }
 
@@ -169,6 +174,7 @@ type RespuestaUsuario = {
   nivel_confirmado: boolean
   foto_perfil?: string | null
   api_keys_configuradas: ApiKeysConfiguradas
+  es_admin: boolean
 }
 
 // Para restaurar la sesión al recargar la página: si hay un token guardado,

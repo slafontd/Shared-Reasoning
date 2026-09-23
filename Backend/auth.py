@@ -45,6 +45,22 @@ DOMINIOS_INSTITUCIONALES = [
     if d.strip()
 ]
 
+# Gestión de usuarios (admin.py): correos que se vuelven administradores
+# automáticamente AL REGISTRARSE (mismo mecanismo que DOMINIOS_INSTITUCIONALES).
+# Resuelve el problema del primer admin sin necesitar acceso directo a la BD:
+# quien se registre con un correo de esta lista queda admin desde el
+# principio, y desde ahí puede promover a cualquier otro usuario vía
+# PATCH /admin/usuarios/{id} — el env var no hace falta usarlo de nuevo.
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.getenv("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+}
+
+
+def es_email_admin(email: str) -> bool:
+    return email.strip().lower() in ADMIN_EMAILS
+
 
 # --- Esquemas de request/response ---
 
@@ -119,6 +135,9 @@ class TokenResponse(BaseModel):
     nivel_confirmado: bool
     foto_perfil: str | None = None
     api_keys_configuradas: ApiKeysConfiguradas = ApiKeysConfiguradas()
+    # El front lo usa solo para decidir si muestra el acceso a
+    # /admin/usuarios — la restricción real vive en requerir_admin().
+    es_admin: bool = False
 
 
 class UsuarioResponse(BaseModel):
@@ -129,6 +148,7 @@ class UsuarioResponse(BaseModel):
     nivel_confirmado: bool
     foto_perfil: str | None = None
     api_keys_configuradas: ApiKeysConfiguradas = ApiKeysConfiguradas()
+    es_admin: bool = False
 
 
 class PerfilRequest(BaseModel):
@@ -237,4 +257,24 @@ def obtener_usuario_actual(
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if usuario is None:
         raise excepcion
+    # Una cuenta desactivada por un administrador (ver admin.py) pierde el
+    # acceso de inmediato, aunque su JWT siga vigente — no basta con bloquear
+    # el login, hay que revisarlo en cada petición autenticada.
+    if not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta fue desactivada. Contacta a un administrador.",
+        )
+    return usuario
+
+
+def requerir_admin(usuario: Usuario = Depends(obtener_usuario_actual)) -> Usuario:
+    """Dependencia para restringir un endpoint a administradores (US: gestión
+    de usuarios). Se apoya en obtener_usuario_actual, así que además exige un
+    JWT válido de una cuenta activa."""
+    if not usuario.es_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta acción requiere permisos de administrador.",
+        )
     return usuario

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, History, PanelLeft, ArrowLeft, ArrowRight,
   Eye, EyeOff, User, LayoutGrid, ChevronDown, X, Settings, LogOut, Share2,
-  BookOpen, Trophy, GraduationCap,
+  BookOpen, Trophy, GraduationCap, ShieldCheck,
 } from 'lucide-react'
 import Protoboard from '../components/Protoboard'
 import ComponentGallery from '../components/ComponentGallery'
@@ -34,6 +34,7 @@ type Props = {
   onAbrirBiblioteca: () => void
   onAbrirRetos: () => void
   onAbrirCursos: () => void
+  onAbrirAdmin: () => void
 }
 
 const NOMBRE_NIVEL: Record<Sesion['nivel'], string> = { basico: 'Básico', intermedio: 'Intermedio', experto: 'Experto' }
@@ -341,7 +342,7 @@ function PanelMetricas({ metricasProceso, usoChat, resumenSesion }: {
 // y barra de estadísticas abajo.
 function VistaPrincipal({
   sesion, usuario, onNuevo, onCargarSesion, onCerrarSesion, onActualizarUsuario,
-  onAbrirBiblioteca, onAbrirRetos, onAbrirCursos,
+  onAbrirBiblioteca, onAbrirRetos, onAbrirCursos, onAbrirAdmin,
 }: Props) {
   const [instrucciones, setInstrucciones] = useState(sesion.instrucciones)
   // Netlist VIGENTE del circuito. Se siembra con el de la sesión, igual que
@@ -763,6 +764,11 @@ function VistaPrincipal({
           <button onClick={onAbrirCursos} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Cursos">
             <GraduationCap size={18} />
           </button>
+          {usuario?.esAdmin && (
+            <button onClick={onAbrirAdmin} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Administración">
+              <ShieldCheck size={18} />
+            </button>
+          )}
         </div>
 
         {/* ============ COLUMNA: CHATS + CONVERSACIÓN (colapsable y redimensionable) ============ */}

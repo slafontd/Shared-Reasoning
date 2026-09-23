@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImageUp, Sun, Moon, Library, BookOpen, Trophy, GraduationCap } from 'lucide-react'
+import { ImageUp, Sun, Moon, Library, BookOpen, Trophy, GraduationCap, ShieldCheck } from 'lucide-react'
 import { analizarEsquematico } from '../api/analizar'
 import { planificarCircuito } from '../api/planificar'
 import { crearSesion, abrirSesion } from '../api/sesiones'
@@ -27,6 +27,7 @@ type Props = {
   onAbrirBiblioteca: () => void
   onAbrirRetos: () => void
   onAbrirCursos: () => void
+  onAbrirAdmin: () => void
 }
 
 // Por ahora la única intención soportada end-to-end es "armar la protoboard"
@@ -50,7 +51,7 @@ const PROMPT_ARMAR_PROTOBOARD = [
 
 // Pantalla de entrada: subir esquemático + prompt opcional + modelo.
 // Si no hay prompt, se pregunta la intención con un cuestionario ligero.
-function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesion, onAbrirBiblioteca, onAbrirRetos, onAbrirCursos }: Props) {
+function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesion, onAbrirBiblioteca, onAbrirRetos, onAbrirCursos, onAbrirAdmin }: Props) {
   const [imagen, setImagen] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -250,6 +251,16 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
             >
               <GraduationCap size={15} />
             </button>
+            {usuario?.esAdmin && (
+              <button
+                onClick={onAbrirAdmin}
+                className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition"
+                style={{ color: 'var(--ink-soft)' }}
+                title="Administración"
+              >
+                <ShieldCheck size={15} />
+              </button>
+            )}
           </div>
         </div>
 

@@ -17,6 +17,7 @@ from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
 import cursos
+import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
 from schemas.retos import RetoDiario
 from auth import (
@@ -32,6 +33,7 @@ from auth import (
     ApiKeysConfiguradas,
     DOMINIOS_INSTITUCIONALES,
     es_correo_institucional,
+    es_email_admin,
     hashear_contrasena,
     verificar_contrasena,
     crear_token,
@@ -86,6 +88,7 @@ TIPOS_IMAGEN_VALIDOS = ["image/jpeg", "image/png", "image/webp", "image/tiff", "
 metricas = Metricas()
 
 app.include_router(cursos.router)
+app.include_router(admin.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -197,6 +200,10 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         nombre=datos.nombre,
         email=datos.email,
         contrasena_hash=hashear_contrasena(datos.contrasena),
+        # Gestión de usuarios: correos en ADMIN_EMAILS quedan admin desde el
+        # registro (ver auth.es_email_admin) — es la única vía automática,
+        # cualquier otra promoción pasa por PATCH /admin/usuarios/{id}.
+        es_admin=es_email_admin(datos.email),
     )
     db.add(usuario)
     try:
@@ -216,6 +223,7 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
+        es_admin=usuario.es_admin,
     )
 
 
@@ -226,6 +234,11 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
     # Mensaje genérico a propósito: no revela si el email existe (evita enumeración).
     if usuario is None or not verificar_contrasena(usuario.contrasena_hash, datos.contrasena):
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
+    # A diferencia de obtener_usuario_actual (que ya rechaza cada petición de
+    # una cuenta desactivada), acá hace falta el chequeo aparte: sin esto, un
+    # usuario desactivado podría volver a loguearse y sacar un JWT nuevo.
+    if not usuario.activo:
+        raise HTTPException(status_code=403, detail="Tu cuenta fue desactivada. Contacta a un administrador.")
 
     token = crear_token(usuario.id)
     return TokenResponse(
@@ -237,6 +250,7 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
+        es_admin=usuario.es_admin,
     )
 
 
@@ -250,6 +264,7 @@ def usuario_actual(usuario: Usuario = Depends(obtener_usuario_actual)):
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
+        es_admin=usuario.es_admin,
     )
 
 
@@ -294,6 +309,7 @@ def actualizar_perfil(
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
+        es_admin=usuario.es_admin,
     )
 
 
@@ -340,6 +356,7 @@ def actualizar_api_keys(
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
+        es_admin=usuario.es_admin,
     )
 
 

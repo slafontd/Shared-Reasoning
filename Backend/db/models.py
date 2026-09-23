@@ -36,6 +36,13 @@ class Usuario(Base):
     # NULL/ausente = aún no se sabe (se muestra "sin verificar" en el selector).
     sin_facturacion_confirmada = Column(JSONB, nullable=True)
     fecha_registro = Column(DateTime(timezone=True), server_default=func.now())
+    # Gestión de usuarios por administrador (ver admin.py). `es_admin` se
+    # asigna solo al registrarse con un correo listado en ADMIN_EMAILS (ver
+    # auth.py) o a mano por otro administrador desde /admin/usuarios — nunca
+    # se puede auto-otorgar por otra vía. `activo=False` = cuenta desactivada:
+    # obtener_usuario_actual la rechaza de inmediato aunque su JWT siga vigente.
+    es_admin = Column(Boolean, nullable=False, default=False)
+    activo = Column(Boolean, nullable=False, default=True)
 
 
 class Sesion(Base):
