@@ -108,25 +108,41 @@ export function obtenerDominiosPermitidos(): Promise<string[]> {
   return dominiosPromesa
 }
 
-// Misma regla que auth.es_correo_institucional en el backend: el dominio es
-// uno de la lista o un subdominio suyo (est.eafit.edu.co vale por eafit.edu.co).
+// Misma regla que auth.es_correo_institucional en el backend: el dominio debe
+// coincidir exactamente con uno de la lista.
 export function esCorreoInstitucional(email: string, dominios: string[]): boolean {
   const dominio = email.trim().toLowerCase().split('@').pop() ?? ''
-  return dominios.some((d) => dominio === d || dominio.endsWith(`.${d}`))
+  return dominios.some((d) => dominio === d.toLowerCase())
 }
 
 export function textoDominios(dominios: string[]): string {
   return dominios.map((d) => `@${d}`).join(', ')
 }
 
-export async function registrar(nombre: string, email: string, contrasena: string): Promise<Usuario> {
+export type RegistroResultado = {
+  email: string
+  email_verificado: boolean
+  codigo_verificacion?: string | null
+  mensaje?: string
+}
+
+export async function registrar(nombre: string, email: string, contrasena: string): Promise<RegistroResultado> {
   const res = await fetch(`${API_URL}/auth/registro`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nombre, email, contrasena }),
   })
   if (!res.ok) throw new Error(await mensajeDeError(res))
-  return aUsuario(await res.json())
+  return await res.json()
+}
+
+export async function verificarEmail(email: string, codigo: string): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/verificar-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, codigo }),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
 }
 
 export async function login(email: string, contrasena: string): Promise<Usuario> {

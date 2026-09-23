@@ -5,6 +5,7 @@ import { LogoWordmark } from './Logo'
 import {
   registrar,
   login,
+  verificarEmail,
   obtenerDominiosPermitidos,
   esCorreoInstitucional,
   textoDominios,
@@ -22,7 +23,10 @@ function Auth({ onEntrar }: Props) {
   const [verPassword, setVerPassword] = useState(false)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
-  // Dominios de correo institucional aceptados en el registro (US01, #2).
+  const [esperandoVerificacion, setEsperandoVerificacion] = useState(false)
+  const [codigoVerificacion, setCodigoVerificacion] = useState('')
+  const [correoPendiente, setCorreoPendiente] = useState('')
+  // Dominios de correo institucional aceptados en registro e inicio de sesión.
   const [dominios, setDominios] = useState<string[]>(['eafit.edu.co'])
 
   useEffect(() => {
@@ -43,22 +47,53 @@ function Auth({ onEntrar }: Props) {
       setError('Completa tu nombre.')
       return
     }
-    // Solo en el registro: las cuentas antiguas con correo personal pueden
-    // seguir entrando (el login no filtra por dominio).
-    if (tab === 'registro' && !esCorreoInstitucional(email, dominios)) {
+    if (!esCorreoInstitucional(email, dominios)) {
       setError(`Usa tu correo institucional (${textoDominios(dominios)}).`)
       return
     }
 
     setCargando(true)
     try {
-      const usuario =
-        tab === 'login'
-          ? await login(email.trim(), password)
-          : await registrar(nombre.trim(), email.trim(), password)
+      if (tab === 'login') {
+        const usuario = await login(email.trim(), password)
+        onEntrar(usuario)
+        return
+      }
+
+      const registro = await registrar(nombre.trim(), email.trim(), password)
+      if (!registro.email_verificado && registro.codigo_verificacion) {
+        setCorreoPendiente(registro.email)
+        setEsperandoVerificacion(true)
+        setError('Cuenta creada. Verifica tu correo con el código recibido para activar la cuenta.')
+        return
+      }
+
+      const usuario = await login(email.trim(), password)
       onEntrar(usuario)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ocurrió un error inesperado.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  async function confirmarVerificacion() {
+    if (!correoPendiente || !codigoVerificacion.trim()) {
+      setError('Introduce el código de verificación.')
+      return
+    }
+
+    setCargando(true)
+    setError('')
+    try {
+      await verificarEmail(correoPendiente, codigoVerificacion.trim())
+      const usuario = await login(correoPendiente, password)
+      setEsperandoVerificacion(false)
+      setCodigoVerificacion('')
+      setCorreoPendiente('')
+      onEntrar(usuario)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'El código de verificación no es válido.')
     } finally {
       setCargando(false)
     }
@@ -96,67 +131,94 @@ function Auth({ onEntrar }: Props) {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              enviar()
+              if (esperandoVerificacion) {
+                confirmarVerificacion()
+              } else {
+                enviar()
+              }
             }}
             className="space-y-4"
           >
-            {tab === 'registro' && (
-              <div>
-                <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Nombre</label>
-                <input
-                  type="text"
-                  autoComplete="name"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className={inputClass}
-                  style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
-                />
-              </div>
+            {esperandoVerificacion ? (
+              <>
+                <div>
+                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Código de verificación</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={codigoVerificacion}
+                    onChange={(e) => setCodigoVerificacion(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className={inputClass}
+                    style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                    placeholder="123456"
+                  />
+                </div>
+                <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  Hemos creado la cuenta para {correoPendiente}. Introduce el código para activarla.
+                </p>
+              </>
+            ) : (
+              <>
+                {tab === 'registro' && (
+                  <div>
+                    <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Nombre</label>
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      value={nombre}
+                      onChange={(e) => setNombre(e.target.value)}
+                      className={inputClass}
+                      style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Correo Electrónico</label>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    placeholder={tab === 'registro' ? `tu.nombre@${dominios[0]}` : undefined}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputClass}
+                    style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                  />
+                  {tab === 'registro' && (
+                    <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                      Usa tu correo institucional ({textoDominios(dominios)}).
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Contraseña</label>
+                  <div className="relative">
+                    <input
+                      type={verPassword ? 'text' : 'password'}
+                      autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className={`${inputClass} pr-11`}
+                      style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 grid place-items-center w-6 h-6 hover:opacity-70 transition"
+                      style={{ color: 'var(--ink-soft)' }}
+                      title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {verPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {tab === 'registro' && (
+                    <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                      Mínimo 12 caracteres, con mayúscula, minúscula y número.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
-            <div>
-              <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Correo Electrónico</label>
-              <input
-                type="email"
-                autoComplete="email"
-                placeholder={tab === 'registro' ? `tu.nombre@${dominios[0]}` : undefined}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={inputClass}
-                style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
-              />
-              {tab === 'registro' && (
-                <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
-                  Usa tu correo institucional ({textoDominios(dominios)}).
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Contraseña</label>
-              <div className="relative">
-                <input
-                  type={verPassword ? 'text' : 'password'}
-                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={`${inputClass} pr-11`}
-                  style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setVerPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 grid place-items-center w-6 h-6 hover:opacity-70 transition"
-                  style={{ color: 'var(--ink-soft)' }}
-                  title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {verPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {tab === 'registro' && (
-                <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
-                  Mínimo 12 caracteres, con mayúscula, minúscula y número.
-                </p>
-              )}
-            </div>
 
             {error && (
               <div
@@ -176,9 +238,11 @@ function Auth({ onEntrar }: Props) {
             >
               {cargando
                 ? 'Un momento...'
-                : tab === 'login'
-                  ? 'Entrar a la mesa de trabajo'
-                  : 'Crear cuenta y entrar'}
+                : esperandoVerificacion
+                  ? 'Confirmar verificación'
+                  : tab === 'login'
+                    ? 'Entrar a la mesa de trabajo'
+                    : 'Crear cuenta y entrar'}
             </button>
           </form>
         </div>
