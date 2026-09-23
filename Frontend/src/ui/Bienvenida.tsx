@@ -251,7 +251,7 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
             >
               <GraduationCap size={15} />
             </button>
-            {usuario?.esAdmin && (
+            {usuario?.rol === 'administrador' && (
               <button
                 onClick={onAbrirAdmin}
                 className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition"

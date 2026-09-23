@@ -34,7 +34,7 @@ from auth import (
     ApiKeysConfiguradas,
     DOMINIOS_INSTITUCIONALES,
     es_correo_institucional,
-    es_email_admin,
+    rol_inicial,
     hashear_contrasena,
     verificar_contrasena,
     crear_token,
@@ -202,10 +202,11 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         nombre=datos.nombre,
         email=datos.email,
         contrasena_hash=hashear_contrasena(datos.contrasena),
-        # Gestión de usuarios: correos en ADMIN_EMAILS quedan admin desde el
-        # registro (ver auth.es_email_admin) — es la única vía automática,
-        # cualquier otra promoción pasa por PATCH /admin/usuarios/{id}.
-        es_admin=es_email_admin(datos.email),
+        # Roles (US06): correos en ADMIN_EMAILS arrancan como administrador
+        # (ver auth.rol_inicial) — es la única vía automática; el resto arranca
+        # como estudiante. Cualquier otro rol (incluido profesor) se asigna a
+        # mano desde PATCH /admin/usuarios/{id}, nunca por autoregistro.
+        rol=rol_inicial(datos.email),
         email_verificado=False,
         codigo_verificacion=codigo,
     )
@@ -251,7 +252,7 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
-        es_admin=usuario.es_admin,
+        rol=usuario.rol,
     )
 
 
@@ -288,7 +289,7 @@ def usuario_actual(usuario: Usuario = Depends(obtener_usuario_actual)):
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
-        es_admin=usuario.es_admin,
+        rol=usuario.rol,
     )
 
 
@@ -333,7 +334,7 @@ def actualizar_perfil(
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
-        es_admin=usuario.es_admin,
+        rol=usuario.rol,
     )
 
 
@@ -380,7 +381,7 @@ def actualizar_api_keys(
         nivel_confirmado=usuario.nivel_confirmado,
         foto_perfil=usuario.foto_perfil,
         api_keys_configuradas=_api_keys_configuradas(usuario),
-        es_admin=usuario.es_admin,
+        rol=usuario.rol,
     )
 
 

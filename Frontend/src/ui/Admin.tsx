@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, Search, ShieldCheck, Trash2, Pencil, UserX, UserCheck } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, Search, ShieldCheck, GraduationCap, User, Trash2, Pencil, UserX, UserCheck } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
-import type { Nivel } from './tipos'
+import type { Nivel, Rol } from './tipos'
 import {
   listarUsuariosAdmin, crearUsuarioAdmin, actualizarUsuarioAdmin, eliminarUsuarioAdmin,
   type UsuarioAdmin,
@@ -19,11 +19,24 @@ const NIVELES: { id: Nivel; etiqueta: string }[] = [
   { id: 'experto', etiqueta: 'Experto' },
 ]
 
+// Roles del sistema (US06) — ver Backend/roles.py. El orden acá es el orden
+// en que aparecen en el selector.
+const ROLES: { id: Rol; etiqueta: string; Icono: typeof ShieldCheck; color: string }[] = [
+  { id: 'administrador', etiqueta: 'Administrador', Icono: ShieldCheck, color: 'var(--accent)' },
+  { id: 'profesor', etiqueta: 'Profesor', Icono: GraduationCap, color: '#2563eb' },
+  { id: 'estudiante', etiqueta: 'Estudiante', Icono: User, color: 'var(--ink-soft)' },
+]
+
+function infoRol(rol: Rol) {
+  return ROLES.find((r) => r.id === rol) ?? ROLES[2]
+}
+
 const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)', color: 'var(--ink)' }
 
 // ============================================================
-//  Gestión de usuarios (administrador): consultar, crear, actualizar,
-//  eliminar/desactivar — restringido en el backend a es_admin (admin.py).
+//  Gestión de usuarios y roles (US06): consultar, crear, actualizar,
+//  eliminar/desactivar, asignar rol — restringido en el backend a
+//  rol=administrador (admin.py).
 // ============================================================
 function Admin({ usuarioActualId, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
@@ -155,13 +168,14 @@ function Admin({ usuarioActualId, onVolver }: Props) {
                       </td>
                       <td className="px-4 py-2.5 capitalize">{u.nivel}</td>
                       <td className="px-4 py-2.5">
-                        {u.esAdmin ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--accent)' }}>
-                            <ShieldCheck size={13} /> Admin
-                          </span>
-                        ) : (
-                          <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>Usuario</span>
-                        )}
+                        {(() => {
+                          const { etiqueta, Icono, color } = infoRol(u.rol)
+                          return (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color }}>
+                              <Icono size={13} /> {etiqueta}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-2.5">
                         <span
@@ -233,7 +247,7 @@ function ModalUsuario({ usuario, esUnoMismo, onCerrar, onGuardado }: {
   const [email, setEmail] = useState(usuario?.email ?? '')
   const [contrasena, setContrasena] = useState('')
   const [nivel, setNivel] = useState<Nivel>(usuario?.nivel ?? 'basico')
-  const [esAdmin, setEsAdmin] = useState(usuario?.esAdmin ?? false)
+  const [rol, setRol] = useState<Rol>(usuario?.rol ?? 'estudiante')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -250,8 +264,8 @@ function ModalUsuario({ usuario, esUnoMismo, onCerrar, onGuardado }: {
     setGuardando(true)
     try {
       const resultado = editando
-        ? await actualizarUsuarioAdmin(usuario!.id, { nombre: nombre.trim(), email: email.trim(), nivel, esAdmin })
-        : await crearUsuarioAdmin({ nombre: nombre.trim(), email: email.trim(), contrasena, nivel, esAdmin })
+        ? await actualizarUsuarioAdmin(usuario!.id, { nombre: nombre.trim(), email: email.trim(), nivel, rol })
+        : await crearUsuarioAdmin({ nombre: nombre.trim(), email: email.trim(), contrasena, nivel, rol })
       onGuardado(resultado)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el usuario.')
@@ -303,15 +317,20 @@ function ModalUsuario({ usuario, esUnoMismo, onCerrar, onGuardado }: {
           </select>
         </label>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={esAdmin}
-            disabled={esUnoMismo}
-            onChange={(e) => setEsAdmin(e.target.checked)}
-          />
-          Administrador
-          {esUnoMismo && <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>(no puedes quitarte este rol a ti mismo)</span>}
+        <label className="block space-y-1">
+          <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>Rol</span>
+          <select
+            value={rol}
+            disabled={esUnoMismo && rol === 'administrador'}
+            onChange={(e) => setRol(e.target.value as Rol)}
+            className="w-full rounded-xl px-3 py-2 text-sm outline-none disabled:opacity-60"
+            style={estiloCampo}
+          >
+            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.etiqueta}</option>)}
+          </select>
+          {esUnoMismo && rol === 'administrador' && (
+            <span className="block text-xs" style={{ color: 'var(--ink-soft)' }}>No puedes quitarte a ti mismo el rol de administrador.</span>
+          )}
         </label>
 
         {error && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}

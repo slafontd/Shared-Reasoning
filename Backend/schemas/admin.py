@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from agents.verbosidad import NIVELES_VALIDOS
 from auth import normalizar_email, validar_correo_institucional
+from roles import ESTUDIANTE, validar_rol
 
 
 def _validar_nivel(valor: str | None) -> str | None:
@@ -18,7 +19,7 @@ class AdminUsuarioResponse(BaseModel):
     nombre: str
     email: str
     nivel: str
-    es_admin: bool
+    rol: str
     activo: bool
     fecha_registro: datetime
 
@@ -33,11 +34,12 @@ class AdminUsuarioCrear(BaseModel):
     # a usar debería cambiarla — no se manda ninguna por correo.
     contrasena: str = Field(min_length=12, max_length=128)
     nivel: str = Field(default="basico")
-    es_admin: bool = False
+    rol: str = Field(default=ESTUDIANTE)
 
     _normalizar_email = field_validator("email", mode="before")(normalizar_email)
     _email_institucional = field_validator("email")(validar_correo_institucional)
     _nivel_valido = field_validator("nivel")(_validar_nivel)
+    _rol_valido = field_validator("rol")(validar_rol)
 
     @field_validator("contrasena")
     @classmethod
@@ -57,9 +59,10 @@ class AdminUsuarioActualizar(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
     nivel: str | None = None
-    es_admin: bool | None = None
+    rol: str | None = None
     activo: bool | None = None
 
     _normalizar_email = field_validator("email", mode="before")(normalizar_email)
     _email_institucional = field_validator("email")(validar_correo_institucional)
     _nivel_valido = field_validator("nivel")(_validar_nivel)
+    _rol_valido = field_validator("rol")(validar_rol)

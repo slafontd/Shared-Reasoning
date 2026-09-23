@@ -11,6 +11,10 @@ export type Intencion = 'armar' | 'pregunta' | 'entender' | 'ejemplo'
 // Nivel autoreportado (§4.B, §8.B) — se elige una vez al inicio de cada sesión.
 export type Nivel = 'basico' | 'intermedio' | 'experto'
 
+// Roles del sistema (US06) — ver Backend/roles.py. Reemplaza al antiguo
+// booleano esAdmin: un usuario tiene exactamente uno de los tres.
+export type Rol = 'administrador' | 'profesor' | 'estudiante'
+
 export const INTENCIONES: { id: Intencion; Icono: LucideIcon; titulo: string; detalle: string }[] = [
   { id: 'armar', Icono: Wrench, titulo: 'Armarlo en la protoboard', detalle: 'Genera el paso a paso para construirlo físicamente.' },
   { id: 'pregunta', Icono: CircleHelp, titulo: 'Tengo una pregunta sobre él', detalle: 'Genera el plan y deja tu duda lista en el chat.' },

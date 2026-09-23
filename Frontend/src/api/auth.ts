@@ -1,4 +1,4 @@
-import type { Nivel } from '../ui/tipos'
+import type { Nivel, Rol } from '../ui/tipos'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const CLAVE_TOKEN = 'paralelo_token'
@@ -23,7 +23,7 @@ export type Usuario = {
   apiKeysConfiguradas: ApiKeysConfiguradas
   // Gestión de usuarios: solo decide si el front muestra el acceso a
   // /admin — la restricción real la hace el backend (requerir_admin).
-  esAdmin: boolean
+  rol: Rol
 }
 
 // Callback opcional que App.tsx registra para reaccionar cuando el token
@@ -68,7 +68,7 @@ type RespuestaToken = {
   nivel_confirmado: boolean
   foto_perfil?: string | null
   api_keys_configuradas: ApiKeysConfiguradas
-  es_admin: boolean
+  rol: Rol
 }
 
 function aUsuario(datos: RespuestaToken): Usuario {
@@ -86,7 +86,7 @@ function aUsuarioDesde(datos: RespuestaUsuario): Usuario {
     nivelConfirmado: datos.nivel_confirmado,
     fotoPerfil: datos.foto_perfil,
     apiKeysConfiguradas: datos.api_keys_configuradas,
-    esAdmin: datos.es_admin,
+    rol: datos.rol,
   }
 }
 
@@ -190,7 +190,7 @@ type RespuestaUsuario = {
   nivel_confirmado: boolean
   foto_perfil?: string | null
   api_keys_configuradas: ApiKeysConfiguradas
-  es_admin: boolean
+  rol: Rol
 }
 
 // Para restaurar la sesión al recargar la página: si hay un token guardado,

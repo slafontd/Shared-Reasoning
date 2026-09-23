@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.models import Usuario
+from roles import ADMINISTRADOR, ESTUDIANTE, ROLES_VALIDOS
 
 load_dotenv()
 
@@ -62,6 +63,15 @@ ADMIN_EMAILS = {
 
 def es_email_admin(email: str) -> bool:
     return email.strip().lower() in ADMIN_EMAILS
+
+
+def rol_inicial(email: str) -> str:
+    """Rol con el que arranca una cuenta que se autoregistra (nunca una
+    creada por un admin, ver admin.py) — administrador si el correo está en
+    ADMIN_EMAILS, estudiante en cualquier otro caso. Nadie se autoregistra
+    directamente como profesor: ese rol siempre lo asigna un administrador
+    desde /admin/usuarios (US06)."""
+    return ADMINISTRADOR if es_email_admin(email) else ESTUDIANTE
 
 
 # --- Esquemas de request/response ---
@@ -146,9 +156,10 @@ class TokenResponse(BaseModel):
     nivel_confirmado: bool
     foto_perfil: str | None = None
     api_keys_configuradas: ApiKeysConfiguradas = ApiKeysConfiguradas()
-    # El front lo usa solo para decidir si muestra el acceso a
-    # /admin/usuarios — la restricción real vive en requerir_admin().
-    es_admin: bool = False
+    # El front lo usa para decidir qué navegación mostrar (ej. el acceso a
+    # /admin/usuarios solo si es "administrador") — la restricción real vive
+    # en requerir_rol()/requerir_admin() (US06).
+    rol: str = ESTUDIANTE
 
 
 class UsuarioResponse(BaseModel):
@@ -160,7 +171,7 @@ class UsuarioResponse(BaseModel):
     nivel_confirmado: bool
     foto_perfil: str | None = None
     api_keys_configuradas: ApiKeysConfiguradas = ApiKeysConfiguradas()
-    es_admin: bool = False
+    rol: str = ESTUDIANTE
 
 
 class PerfilRequest(BaseModel):
@@ -289,13 +300,27 @@ def obtener_usuario_actual(
     return usuario
 
 
-def requerir_admin(usuario: Usuario = Depends(obtener_usuario_actual)) -> Usuario:
-    """Dependencia para restringir un endpoint a administradores (US: gestión
-    de usuarios). Se apoya en obtener_usuario_actual, así que además exige un
-    JWT válido de una cuenta activa."""
-    if not usuario.es_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Esta acción requiere permisos de administrador.",
-        )
-    return usuario
+def requerir_rol(*roles_permitidos: str):
+    """Fábrica de dependencias (US06): restringe un endpoint a uno o varios
+    roles. Es el mecanismo genérico con el que CUALQUIER endpoint nuevo debe
+    aplicar sus permisos por rol — ej. `Depends(requerir_rol(ADMINISTRADOR,
+    PROFESOR))` en cursos.py. Se apoya en obtener_usuario_actual, así que
+    además exige un JWT válido de una cuenta activa y verificada."""
+    invalidos = set(roles_permitidos) - ROLES_VALIDOS
+    if invalidos:
+        raise ValueError(f"requerir_rol() recibió roles inexistentes: {invalidos}")
+
+    def dependencia(usuario: Usuario = Depends(obtener_usuario_actual)) -> Usuario:
+        if usuario.rol not in roles_permitidos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Esta acción requiere uno de estos roles: {', '.join(roles_permitidos)}.",
+            )
+        return usuario
+
+    return dependencia
+
+
+# Caso particular más común de requerir_rol() — se deja con nombre propio
+# porque admin.py lo usa como dependencia fija de TODO un router.
+requerir_admin = requerir_rol(ADMINISTRADOR)

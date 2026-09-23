@@ -108,7 +108,7 @@ function App() {
     return <RetoDiario onVolver={() => setPantallaExtra('retos')} />
   }
   if (pantallaExtra === 'cursos') {
-    return <Cursos onVolver={() => setPantallaExtra(null)} />
+    return <Cursos usuario={usuario} onVolver={() => setPantallaExtra(null)} />
   }
   if (pantallaExtra === 'admin') {
     return <Admin usuarioActualId={usuario!.usuarioId} onVolver={() => setPantallaExtra(null)} />

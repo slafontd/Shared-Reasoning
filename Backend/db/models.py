@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 from db.database import Base
+from roles import ROL_POR_DEFECTO
 
 
 class Usuario(Base):
@@ -38,12 +39,13 @@ class Usuario(Base):
     # NULL/ausente = aún no se sabe (se muestra "sin verificar" en el selector).
     sin_facturacion_confirmada = Column(JSONB, nullable=True)
     fecha_registro = Column(DateTime(timezone=True), server_default=func.now())
-    # Gestión de usuarios por administrador (ver admin.py). `es_admin` se
-    # asigna solo al registrarse con un correo listado en ADMIN_EMAILS (ver
-    # auth.py) o a mano por otro administrador desde /admin/usuarios — nunca
-    # se puede auto-otorgar por otra vía. `activo=False` = cuenta desactivada:
-    # obtener_usuario_actual la rechaza de inmediato aunque su JWT siga vigente.
-    es_admin = Column(Boolean, nullable=False, default=False)
+    # Roles y gestión de usuarios por administrador (US06, ver roles.py y
+    # admin.py). El rol "administrador" se asigna solo al registrarse con un
+    # correo listado en ADMIN_EMAILS (ver auth.py) o a mano por otro
+    # administrador desde /admin/usuarios — nunca se puede auto-otorgar por
+    # otra vía. `activo=False` = cuenta desactivada: obtener_usuario_actual la
+    # rechaza de inmediato aunque su JWT siga vigente.
+    rol = Column(String(20), nullable=False, default=ROL_POR_DEFECTO)
     activo = Column(Boolean, nullable=False, default=True)
 
 
@@ -129,9 +131,9 @@ class ChatMensaje(Base):
 
 
 class Curso(Base):
-    """Curso creado por un usuario (US08, #11). Por ahora cualquier usuario
-    autenticado puede crear cursos: la gestión de roles (US06, #8) decidirá
-    más adelante quién puede hacerlo (p. ej. solo docentes)."""
+    """Curso creado por un usuario (US08, #11). Crearlo está restringido a
+    administrador/profesor desde que existen roles (US06, #8, ver
+    cursos.crear_curso) — consultarlo sigue abierto a cualquier autenticado."""
     __tablename__ = "cursos"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

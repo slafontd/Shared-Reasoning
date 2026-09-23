@@ -1,17 +1,18 @@
-import type { Nivel } from '../ui/tipos'
+import type { Nivel, Rol } from '../ui/tipos'
 import { fetchAutenticado } from './auth'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-// Gestión de usuarios por administrador — ver Backend/admin.py. Todas estas
-// llamadas fallan con 403 si el usuario actual no es admin (requerir_admin);
-// el front solo decide si MUESTRA la pantalla, nunca hace de gatekeeper real.
+// Gestión de usuarios y roles (US06) por administrador — ver Backend/admin.py.
+// Todas estas llamadas fallan con 403 si el usuario actual no es admin
+// (requerir_admin); el front solo decide si MUESTRA la pantalla, nunca hace
+// de gatekeeper real.
 export type UsuarioAdmin = {
   id: string
   nombre: string
   email: string
   nivel: Nivel
-  esAdmin: boolean
+  rol: Rol
   activo: boolean
   fechaRegistro: string
 }
@@ -21,7 +22,7 @@ type UsuarioAdminAPI = {
   nombre: string
   email: string
   nivel: Nivel
-  es_admin: boolean
+  rol: Rol
   activo: boolean
   fecha_registro: string
 }
@@ -32,7 +33,7 @@ function aUsuarioAdmin(u: UsuarioAdminAPI): UsuarioAdmin {
     nombre: u.nombre,
     email: u.email,
     nivel: u.nivel,
-    esAdmin: u.es_admin,
+    rol: u.rol,
     activo: u.activo,
     fechaRegistro: u.fecha_registro,
   }
@@ -61,7 +62,7 @@ export async function crearUsuarioAdmin(datos: {
   email: string
   contrasena: string
   nivel: Nivel
-  esAdmin: boolean
+  rol: Rol
 }): Promise<UsuarioAdmin> {
   const res = await fetchAutenticado(`${API_URL}/admin/usuarios`, {
     method: 'POST',
@@ -71,7 +72,7 @@ export async function crearUsuarioAdmin(datos: {
       email: datos.email,
       contrasena: datos.contrasena,
       nivel: datos.nivel,
-      es_admin: datos.esAdmin,
+      rol: datos.rol,
     }),
   })
   if (!res.ok) throw new Error(await mensajeDeError(res))
@@ -80,7 +81,7 @@ export async function crearUsuarioAdmin(datos: {
 
 export async function actualizarUsuarioAdmin(
   id: string,
-  cambios: { nombre?: string; email?: string; nivel?: Nivel; esAdmin?: boolean; activo?: boolean },
+  cambios: { nombre?: string; email?: string; nivel?: Nivel; rol?: Rol; activo?: boolean },
 ): Promise<UsuarioAdmin> {
   const res = await fetchAutenticado(`${API_URL}/admin/usuarios/${id}`, {
     method: 'PATCH',
@@ -89,7 +90,7 @@ export async function actualizarUsuarioAdmin(
       nombre: cambios.nombre,
       email: cambios.email,
       nivel: cambios.nivel,
-      es_admin: cambios.esAdmin,
+      rol: cambios.rol,
       activo: cambios.activo,
     }),
   })

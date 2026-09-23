@@ -764,7 +764,7 @@ function VistaPrincipal({
           <button onClick={onAbrirCursos} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Cursos">
             <GraduationCap size={18} />
           </button>
-          {usuario?.esAdmin && (
+          {usuario?.rol === 'administrador' && (
             <button onClick={onAbrirAdmin} className="grid place-items-center w-9 h-9 rounded-lg hover:bg-black/5 transition" title="Administración">
               <ShieldCheck size={18} />
             </button>

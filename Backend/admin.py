@@ -1,10 +1,10 @@
-"""Gestión de usuarios por administrador.
+"""Gestión de usuarios y roles por administrador (US06).
 
 Router aparte de main.py, mismo patrón que cursos.py: se monta con
-app.include_router(admin.router). Todas las rutas exigen es_admin=True — la
-dependencia se declara una sola vez a nivel de router (`dependencies=`) en vez
-de repetirla en cada endpoint, así ninguna ruta nueva que se agregue acá puede
-olvidarse de restringirla.
+app.include_router(admin.router). Todas las rutas exigen rol=administrador —
+la dependencia se declara una sola vez a nivel de router (`dependencies=`) en
+vez de repetirla en cada endpoint, así ninguna ruta nueva que se agregue acá
+puede olvidarse de restringirla.
 """
 
 from uuid import UUID
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from auth import hashear_contrasena, requerir_admin
 from db.database import get_db
 from db.models import Usuario
+from roles import ADMINISTRADOR
 from schemas.admin import AdminUsuarioActualizar, AdminUsuarioCrear, AdminUsuarioResponse
 
 router = APIRouter(prefix="/admin/usuarios", tags=["admin"], dependencies=[Depends(requerir_admin)])
@@ -63,7 +64,7 @@ def crear_usuario(datos: AdminUsuarioCrear, db: Session = Depends(get_db)):
         contrasena_hash=hashear_contrasena(datos.contrasena),
         nivel=datos.nivel,
         nivel_confirmado=True,  # lo crea un admin, no pasa por la encuesta de nivel
-        es_admin=datos.es_admin,
+        rol=datos.rol,
         # Verificación de correo (ver auth.py): un admin ya está dando fe de la
         # cuenta al crearla a mano, así que no tiene sentido pedirle además que
         # confirme un código que este endpoint ni siquiera genera — de lo
@@ -91,13 +92,13 @@ def actualizar_usuario(
     if destino is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
-    # Un admin no puede desactivarse ni quitarse el rol a sí mismo: si es el
-    # único admin activo, se quedaría sin forma de revertirlo (no hay bypass
-    # ni acceso directo a la BD contemplado en este flujo).
+    # Un admin no puede desactivarse ni quitarse el rol de administrador a sí
+    # mismo: si es el único admin activo, se quedaría sin forma de revertirlo
+    # (no hay bypass ni acceso directo a la BD contemplado en este flujo).
     if destino.id == admin.id:
         if datos.activo is False:
             raise HTTPException(status_code=400, detail="No puedes desactivar tu propia cuenta.")
-        if datos.es_admin is False:
+        if datos.rol is not None and datos.rol != ADMINISTRADOR:
             raise HTTPException(status_code=400, detail="No puedes quitarte a ti mismo el rol de administrador.")
 
     if datos.nombre is not None:
@@ -108,8 +109,8 @@ def actualizar_usuario(
         destino.email = datos.email
     if datos.nivel is not None:
         destino.nivel = datos.nivel
-    if datos.es_admin is not None:
-        destino.es_admin = datos.es_admin
+    if datos.rol is not None:
+        destino.rol = datos.rol
     if datos.activo is not None:
         destino.activo = datos.activo
 

@@ -3,8 +3,10 @@ import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Se
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
 import { crearCurso, listarCursos, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
+import type { Usuario } from '../api/auth'
 
 type Props = {
+  usuario: Usuario | null
   onVolver: () => void
 }
 
@@ -19,8 +21,12 @@ const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)
 // ============================================================
 //  Cursos: crear (US08, #11) y consultar (US09, #12).
 // ============================================================
-function Cursos({ onVolver }: Props) {
+function Cursos({ usuario, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
+  // US06: crear un curso es una acción de docencia — el backend ya lo
+  // restringe (cursos.crear_curso), esto solo evita ofrecer un botón que
+  // terminaría en un 403 para un estudiante.
+  const puedeCrear = usuario?.rol === 'administrador' || usuario?.rol === 'profesor'
   const [cursos, setCursos] = useState<Curso[]>([])
   const [modalAbierto, setModalAbierto] = useState(false)
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
@@ -105,13 +111,15 @@ function Cursos({ onVolver }: Props) {
               style={estiloCampo}
             />
           </div>
-          <button
-            onClick={() => setModalAbierto(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
-          >
-            <Plus size={15} />
-            Nuevo curso
-          </button>
+          {puedeCrear && (
+            <button
+              onClick={() => setModalAbierto(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
+            >
+              <Plus size={15} />
+              Nuevo curso
+            </button>
+          )}
         </div>
 
         {recienCreado && (
@@ -144,7 +152,9 @@ function Cursos({ onVolver }: Props) {
             <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
               {busqueda.trim()
                 ? `Ningún curso coincide con «${busqueda.trim()}».`
-                : 'Todavía no hay cursos. Crea el primero con «Nuevo curso».'}
+                : puedeCrear
+                  ? 'Todavía no hay cursos. Crea el primero con «Nuevo curso».'
+                  : 'Todavía no hay cursos.'}
             </p>
           </div>
         ) : (

@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from auth import obtener_usuario_actual
+from auth import obtener_usuario_actual, requerir_rol
 from db.database import get_db
 from db.models import Curso, Usuario
 from rate_limit import verificar_frecuencia
+from roles import ADMINISTRADOR, PROFESOR
 from schemas.cursos import CursoCrear, CursoResponse
 
 router = APIRouter(prefix="/cursos", tags=["cursos"])
@@ -51,7 +52,10 @@ def a_respuesta(curso: Curso) -> CursoResponse:
 @router.post("", response_model=CursoResponse, status_code=201)
 def crear_curso(
     datos: CursoCrear,
-    usuario: Usuario = Depends(obtener_usuario_actual),
+    # US06: crear un curso es una acción de docencia, no de cualquier
+    # usuario autenticado — resuelve el "decidirá más adelante" que dejó
+    # pendiente el modelo Curso (db/models.py) cuando todavía no existían roles.
+    usuario: Usuario = Depends(requerir_rol(ADMINISTRADOR, PROFESOR)),
     db: Session = Depends(get_db),
 ):
     verificar_frecuencia(f"user:{usuario.id}")
