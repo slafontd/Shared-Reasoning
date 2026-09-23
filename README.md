@@ -210,6 +210,7 @@ El frontend queda en <http://localhost:5173>.
 | `DATABASE_URL` | Sí | Connection string de PostgreSQL/Supabase (**Session pooler**, no la directa). |
 | `JWT_SECRET_KEY` | Sí | Secreto para firmar los tokens (ver abajo). |
 | `API_KEYS_SECRET` | Sí | Llave Fernet que cifra las API keys que los usuarios guardan en su cuenta. |
+| `DOMINIOS_INSTITUCIONALES` | No | Dominios de correo aceptados en el registro, separados por coma (subdominios incluidos). Por defecto `eafit.edu.co`. |
 | `JWT_EXPIRA_MINUTOS` | No | Vida del token en minutos (por defecto `10080` = 7 días). |
 | `FRONTEND_URL` | Prod | Dominio del frontend desplegado para CORS. Si se omite, solo se acepta localhost. |
 | `SUPABASE_URL` · `SUPABASE_ANON_KEY` | No | Esquemáticos de ejemplo (bucket público, solo lectura). Sin ellas, esa vista queda vacía (no rompe la app). |
@@ -241,6 +242,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 |--------|------|-------------|
 | `GET` | `/proveedores` · `/biblioteca-esquematicos` | Catálogo de modelos · esquemáticos de ejemplo. |
 | `POST` | `/auth/registro` · `/auth/login` | Crear cuenta / iniciar sesión (devuelven JWT). |
+| `GET` | `/auth/dominios-permitidos` | Dominios de correo institucional aceptados (público). |
 | `GET` | `/auth/me` · `/auth/modelos-disponibles` | Usuario autenticado · modelos habilitados para sus keys. |
 | `PATCH` | `/auth/perfil` · `/auth/contrasena` · `/auth/api-keys` · `/auth/nivel` | Actualizar perfil, contraseña, API keys propias y nivel. |
 | `POST` | `/analizar` · `/planificar` | Imagen → netlist · netlist → instrucciones. |

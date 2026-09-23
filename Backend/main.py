@@ -29,6 +29,8 @@ from auth import (
     ContrasenaRequest,
     ApiKeysRequest,
     ApiKeysConfiguradas,
+    DOMINIOS_INSTITUCIONALES,
+    es_correo_institucional,
     hashear_contrasena,
     verificar_contrasena,
     crear_token,
@@ -88,7 +90,10 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     campos = []
     for error in exc.errors():
         ubicacion = " → ".join(str(p) for p in error["loc"] if p != "body")
-        campos.append(f"{ubicacion}: {error['msg']}")
+        # Los ValueError de nuestros validadores llegan como "Value error, <texto>":
+        # se quita el prefijo para que el usuario vea solo el texto en español.
+        msg = str(error["msg"]).removeprefix("Value error, ")
+        campos.append(f"{ubicacion}: {msg}")
     mensaje = "Faltan campos obligatorios o tienen formato incorrecto: " + "; ".join(campos)
     return JSONResponse(status_code=422, content={"detail": mensaje})
 
@@ -128,6 +133,13 @@ async def biblioteca_esquematicos():
     uno en vez de subir el propio (ver Bienvenida.tsx). Público por la misma
     razón que /proveedores: no expone nada sensible."""
     return await listar_biblioteca()
+
+
+@app.get("/auth/dominios-permitidos")
+async def dominios_permitidos():
+    """Dominios de correo institucional aceptados en el registro (US01, #2).
+    Público: el formulario de registro lo muestra antes de autenticarse."""
+    return {"dominios": DOMINIOS_INSTITUCIONALES}
 
 
 def _ip_de(request: Request) -> str:
@@ -249,6 +261,11 @@ def actualizar_perfil(
 
     if datos.email is not None and datos.email != usuario.email:
         # Verificación previa por claridad; la restricción UNIQUE es la garantía final.
+        # Sin esto, cualquiera se registraría con el institucional y luego lo
+        # cambiaría por uno personal desde "Mi cuenta" (US01, #2).
+        if not es_correo_institucional(datos.email):
+            permitidos = ", ".join("@" + d for d in DOMINIOS_INSTITUCIONALES)
+            raise HTTPException(status_code=422, detail=f"Usa tu correo institucional ({permitidos}).")
         otro = _buscar_por_email(db, datos.email)
         if otro is not None and otro.id != usuario.id:
             raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")

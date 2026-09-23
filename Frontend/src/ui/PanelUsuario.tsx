@@ -1,6 +1,13 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { LogOut, X, Check, Upload, Trash2, ChevronDown } from 'lucide-react'
-import { actualizarPerfil, cambiarContrasena, type Usuario } from '../api/auth'
+import {
+  actualizarPerfil,
+  cambiarContrasena,
+  obtenerDominiosPermitidos,
+  esCorreoInstitucional,
+  textoDominios,
+  type Usuario,
+} from '../api/auth'
 import Avatar from './Avatar'
 import ConfiguracionApiKeys from './ConfiguracionApiKeys'
 import { AVATARES_PRESET } from './avatares'
@@ -80,6 +87,11 @@ export function ModalCuenta({
   const [email, setEmail] = useState(usuario.email)
   const [avisoPerfil, setAvisoPerfil] = useState<Aviso>(null)
   const [guardandoPerfil, setGuardandoPerfil] = useState(false)
+  const [dominios, setDominios] = useState<string[]>(['eafit.edu.co'])
+
+  useEffect(() => {
+    obtenerDominiosPermitidos().then(setDominios)
+  }, [])
 
   // Foto de perfil: se aplica al instante (elegir personaje o subir), sin
   // compartir botón con nombre/correo — un clic, un cambio, una confirmación.
@@ -115,6 +127,12 @@ export function ModalCuenta({
     }
     if (!emailValido) {
       setAvisoPerfil({ tipo: 'error', texto: 'Escribe un correo con formato válido (ej. nombre@dominio.com).' })
+      return
+    }
+    // Solo si el correo cambia: una cuenta antigua con correo personal puede
+    // seguir editando su nombre sin que se le exija cambiarlo (US01, #2).
+    if (email.trim() !== usuario.email && !esCorreoInstitucional(email, dominios)) {
+      setAvisoPerfil({ tipo: 'error', texto: `Usa tu correo institucional (${textoDominios(dominios)}).` })
       return
     }
     setGuardandoPerfil(true)

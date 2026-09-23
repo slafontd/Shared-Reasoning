@@ -85,6 +85,35 @@ function aUsuarioDesde(datos: RespuestaUsuario): Usuario {
   }
 }
 
+// --- Correo institucional (US01, #2) ---
+// El backend es quien decide qué dominios valen (DOMINIOS_INSTITUCIONALES en
+// su .env); el front los pide una sola vez para avisar ANTES de enviar. Si la
+// petición falla se usa el valor por defecto — el backend igual valida.
+const DOMINIOS_POR_DEFECTO = ['eafit.edu.co']
+let dominiosPromesa: Promise<string[]> | null = null
+
+export function obtenerDominiosPermitidos(): Promise<string[]> {
+  dominiosPromesa ??= fetch(`${API_URL}/auth/dominios-permitidos`)
+    .then((res) => (res.ok ? res.json() : Promise.reject()))
+    .then((datos: { dominios: string[] }) => (datos.dominios.length ? datos.dominios : DOMINIOS_POR_DEFECTO))
+    .catch(() => {
+      dominiosPromesa = null // reintenta la próxima vez
+      return DOMINIOS_POR_DEFECTO
+    })
+  return dominiosPromesa
+}
+
+// Misma regla que auth.es_correo_institucional en el backend: el dominio es
+// uno de la lista o un subdominio suyo (est.eafit.edu.co vale por eafit.edu.co).
+export function esCorreoInstitucional(email: string, dominios: string[]): boolean {
+  const dominio = email.trim().toLowerCase().split('@').pop() ?? ''
+  return dominios.some((d) => dominio === d || dominio.endsWith(`.${d}`))
+}
+
+export function textoDominios(dominios: string[]): string {
+  return dominios.map((d) => `@${d}`).join(', ')
+}
+
 export async function registrar(nombre: string, email: string, contrasena: string): Promise<Usuario> {
   const res = await fetch(`${API_URL}/auth/registro`, {
     method: 'POST',

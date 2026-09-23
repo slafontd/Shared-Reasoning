@@ -25,6 +25,7 @@ if not TEST_DATABASE_URL:
 # leen el entorno al importarse (load_dotenv no pisa variables ya definidas).
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET_KEY", "secreto-solo-para-pruebas-no-usar-en-produccion")
+os.environ["DOMINIOS_INSTITUCIONALES"] = "eafit.edu.co"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
