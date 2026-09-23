@@ -49,3 +49,15 @@ export async function crearCurso(datos: { nombre: string; codigo?: string; descr
   if (!res.ok) throw new Error(await mensajeDeError(res))
   return aCurso(await res.json())
 }
+
+// Tamaño de página: igual al límite por defecto de GET /cursos.
+export const CURSOS_POR_PAGINA = 50
+
+export async function listarCursos(opciones: { busqueda?: string; desplazamiento?: number } = {}): Promise<Curso[]> {
+  const params = new URLSearchParams({ limite: String(CURSOS_POR_PAGINA) })
+  if (opciones.busqueda?.trim()) params.set('busqueda', opciones.busqueda.trim())
+  if (opciones.desplazamiento) params.set('desplazamiento', String(opciones.desplazamiento))
+  const res = await fetchAutenticado(`${API_URL}/cursos?${params}`)
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return ((await res.json()) as CursoAPI[]).map(aCurso)
+}

@@ -253,7 +253,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `POST` `GET` `DELETE` | `/materiales/subir` · `/materiales` · `/materiales/{id}` | Subir, listar y eliminar materiales de la biblioteca. |
 | `GET` | `/materiales/portadas/{id}` · `/materiales/descargar/{id}` | Portada (pública) · archivo (requiere JWT). |
 | `GET` `POST` | `/materiales/tutorial/{componente}` · `/materiales/tutorial-chat` | Tutorial de IA por componente · chat de seguimiento. |
-| `POST` | `/cursos` | Crear un curso (nombre, código opcional, descripción opcional). |
+| `POST` `GET` | `/cursos` · `/cursos/{id}` | Crear un curso · listar/buscar cursos (`busqueda`, `limite`, `desplazamiento`) · detalle. |
 | `GET` | `/retos/diario` | Reto diario gamificado, generado por IA según el nivel del usuario. |
 
 Todos los endpoints (excepto registro/login y los públicos de arriba) requieren un token JWT en el header `Authorization: Bearer <token>`.
