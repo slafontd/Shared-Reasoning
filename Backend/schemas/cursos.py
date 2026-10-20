@@ -44,3 +44,10 @@ class CursoResponse(BaseModel):
     # el profesor comparte para que sus estudiantes se inscriban. Para el
     # resto viene en null — conocerlo es justamente lo que da acceso.
     codigo_acceso: str | None = None
+    # US13: si el usuario que consulta ya está inscrito en este curso.
+    inscrito: bool = False
+
+
+class InscripcionCrear(BaseModel):
+    # El código de acceso del curso (US12); se normaliza en el endpoint.
+    codigo: str = Field(min_length=1, max_length=20)

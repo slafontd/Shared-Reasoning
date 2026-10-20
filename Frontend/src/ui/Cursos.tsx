@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound, Copy, Check } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
-import { crearCurso, listarCursos, eliminarCurso, buscarCursoPorCodigo, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
+import {
+  crearCurso, listarCursos, eliminarCurso, buscarCursoPorCodigo, inscribirseCurso, listarMisCursos,
+  CURSOS_POR_PAGINA, type Curso,
+} from '../api/cursos'
 import type { Usuario } from '../api/auth'
 
 type Props = {
@@ -16,11 +19,17 @@ const NOMBRE_MAX = 150
 const CODIGO_MAX = 20
 const DESCRIPCION_MAX = 2000
 
+// Misma regla que la búsqueda del backend (cursos._sin_tildes): sin
+// mayúsculas ni tildes. Se usa para filtrar "Mis cursos" en el navegador.
+function sinTildes(texto: string) {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)', color: 'var(--ink)' }
 
 // ============================================================
 //  Cursos: crear (US08, #11), consultar (US09, #12), eliminar (US11)
-//  y buscar por código de acceso (US12, #15).
+//  buscar por código de acceso (US12, #15) e inscribirse (US13, #16).
 // ============================================================
 function Cursos({ usuario, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
@@ -41,6 +50,10 @@ function Cursos({ usuario, onVolver }: Props) {
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
   const [seleccionado, setSeleccionado] = useState<Curso | null>(null)
   const [buscarCodigoAbierto, setBuscarCodigoAbierto] = useState(false)
+  // US13: un estudiante ve primero los cursos en los que está inscrito; la
+  // pestaña "Todos" es el catálogo completo (US09).
+  const [vista, setVista] = useState<'mis' | 'todos'>(puedeCrear ? 'todos' : 'mis')
+  const [inscritoAviso, setInscritoAviso] = useState<Curso | null>(null)
 
   // Consulta (US09, #12): la búsqueda se hace en el backend (nombre o código,
   // sin mayúsculas ni tildes) con una pausa de 300 ms para no pedir en cada tecla.
@@ -52,23 +65,39 @@ function Cursos({ usuario, onVolver }: Props) {
 
   useEffect(() => {
     let cancelado = false
+    // "Mis cursos" se trae completo y se filtra en el navegador; "Todos" busca
+    // en el backend, así que solo esa pestaña depende de `busqueda`.
     const temporizador = setTimeout(() => {
       setCargando(true)
       setError(null)
-      listarCursos({ busqueda })
+      const peticion = vista === 'mis' ? listarMisCursos() : listarCursos({ busqueda })
+      peticion
         .then((lista) => {
           if (cancelado) return
           setCursos(lista)
-          setHayMas(lista.length === CURSOS_POR_PAGINA)
+          setHayMas(vista === 'todos' && lista.length === CURSOS_POR_PAGINA)
         })
         .catch((e) => !cancelado && setError(e instanceof Error ? e.message : 'No se pudieron cargar los cursos.'))
         .finally(() => !cancelado && setCargando(false))
-    }, busqueda ? 300 : 0)
+    }, vista === 'todos' && busqueda ? 300 : 0)
     return () => {
       cancelado = true
       clearTimeout(temporizador)
     }
-  }, [busqueda])
+  }, [busqueda, vista])
+
+  const visibles = vista === 'mis' && busqueda.trim()
+    ? cursos.filter((c) => sinTildes(`${c.nombre} ${c.codigo ?? ''}`).includes(sinTildes(busqueda.trim())))
+    : cursos
+
+  // US13: tras inscribirse, el curso aparece en "Mis cursos" de inmediato.
+  function alInscribirse(curso: Curso) {
+    setBuscarCodigoAbierto(false)
+    setInscritoAviso(curso)
+    setBusqueda('')
+    if (vista === 'mis') setCursos((actuales) => [curso, ...actuales.filter((c) => c.id !== curso.id)])
+    else setVista('mis')
+  }
 
   async function cargarMas() {
     setCargandoMas(true)
@@ -158,6 +187,37 @@ function Cursos({ usuario, onVolver }: Props) {
           )}
         </div>
 
+        {!puedeCrear && (
+          <div className="flex gap-1 rounded-lg p-1 w-fit" style={{ background: 'var(--bg2)' }} role="tablist">
+            {([['mis', 'Mis cursos'], ['todos', 'Todos los cursos']] as const).map(([id, etiqueta]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={vista === id}
+                onClick={() => setVista(id)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium transition"
+                style={{ background: vista === id ? 'var(--bg1)' : 'transparent', color: vista === id ? 'var(--ink)' : 'var(--ink-soft)' }}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {inscritoAviso && (
+          <div
+            role="status"
+            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
+            style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.4)' }}
+          >
+            <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
+            <span className="flex-1">Te inscribiste en «{inscritoAviso.nombre}».</span>
+            <button onClick={() => setInscritoAviso(null)} className="grid place-items-center w-6 h-6 rounded hover:bg-black/5" title="Cerrar aviso">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {recienCreado && (
           <div
             role="status"
@@ -187,12 +247,14 @@ function Cursos({ usuario, onVolver }: Props) {
           <p className="text-sm text-center py-16 flex items-center justify-center gap-2" style={{ color: 'var(--ink-soft)' }}>
             <Loader2 size={15} className="animate-spin" /> Cargando cursos…
           </p>
-        ) : cursos.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <div className="panel rounded-2xl p-10 text-center space-y-2">
             <GraduationCap size={28} className="mx-auto" style={{ color: 'var(--accent)' }} />
             <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
               {busqueda.trim()
                 ? `Ningún curso coincide con «${busqueda.trim()}».`
+                : vista === 'mis'
+                  ? 'Todavía no estás inscrito en ningún curso. Pídele el código a tu profesor y usa «Unirme con código».'
                 : puedeCrear
                   ? 'Todavía no hay cursos. Crea el primero con «Nuevo curso».'
                   : 'Todavía no hay cursos.'}
@@ -201,7 +263,7 @@ function Cursos({ usuario, onVolver }: Props) {
         ) : (
           <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cursos.map((c) => (
+              {visibles.map((c) => (
                 <TarjetaCurso
                   key={c.id}
                   curso={c}
@@ -228,7 +290,7 @@ function Cursos({ usuario, onVolver }: Props) {
       </main>
 
       {modalAbierto && <ModalCrearCurso onCerrar={() => setModalAbierto(false)} onCreado={alCrear} />}
-      {buscarCodigoAbierto && <ModalBuscarPorCodigo onCerrar={() => setBuscarCodigoAbierto(false)} />}
+      {buscarCodigoAbierto && <ModalBuscarPorCodigo onCerrar={() => setBuscarCodigoAbierto(false)} onInscrito={alInscribirse} />}
       {seleccionado && (
         <ModalDetalleCurso
           curso={seleccionado}
@@ -249,6 +311,14 @@ function EtiquetaCodigo({ codigo }: { codigo: string }) {
   return (
     <span className="shrink-0 rounded-md px-2 py-0.5 text-xs font-mono" style={{ background: 'var(--bg1)', color: 'var(--ink-soft)' }}>
       {codigo}
+    </span>
+  )
+}
+
+function EtiquetaInscrito() {
+  return (
+    <span className="w-fit flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: 'rgba(22,163,74,.12)', color: '#15803d' }}>
+      <Check size={12} /> Inscrito
     </span>
   )
 }
@@ -276,6 +346,7 @@ function TarjetaCurso({ curso, onAbrir, puedeEliminar, onEliminar }: {
           <h2 className="font-semibold flex-1 break-words">{curso.nombre}</h2>
           {curso.codigo && <EtiquetaCodigo codigo={curso.codigo} />}
         </div>
+        {curso.inscrito && <EtiquetaInscrito />}
         {curso.descripcion && (
           <p className="text-sm line-clamp-3 whitespace-pre-line" style={{ color: 'var(--ink-soft)' }}>{curso.descripcion}</p>
         )}
@@ -372,11 +443,26 @@ function CodigoAcceso({ codigo }: { codigo: string }) {
 
 // US12 (#15): el estudiante escribe el código y ve el curso — o un aviso
 // claro si no existe.
-function ModalBuscarPorCodigo({ onCerrar }: { onCerrar: () => void }) {
+function ModalBuscarPorCodigo({ onCerrar, onInscrito }: { onCerrar: () => void; onInscrito: (c: Curso) => void }) {
   const [codigo, setCodigo] = useState('')
   const [buscando, setBuscando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [encontrado, setEncontrado] = useState<Curso | null>(null)
+  const [inscribiendo, setInscribiendo] = useState(false)
+
+  // US13 (#16): con el curso a la vista, el estudiante confirma la inscripción.
+  async function inscribirse() {
+    if (!encontrado) return
+    setError(null)
+    setInscribiendo(true)
+    try {
+      onInscrito(await inscribirseCurso(encontrado.codigoAcceso ?? codigo))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo completar la inscripción.')
+    } finally {
+      setInscribiendo(false)
+    }
+  }
 
   async function buscar() {
     setError(null)
@@ -443,6 +529,20 @@ function ModalBuscarPorCodigo({ onCerrar }: { onCerrar: () => void }) {
               <p className="text-sm line-clamp-3 whitespace-pre-line" style={{ color: 'var(--ink-soft)' }}>{encontrado.descripcion}</p>
             )}
             <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Profesor: {encontrado.creadoPorNombre}</p>
+            <div className="pt-2">
+              {encontrado.inscrito ? (
+                <EtiquetaInscrito />
+              ) : (
+                <button
+                  onClick={inscribirse}
+                  disabled={inscribiendo}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 disabled:opacity-50 transition"
+                >
+                  {inscribiendo && <Loader2 size={14} className="animate-spin" />}
+                  {inscribiendo ? 'Inscribiendo…' : 'Inscribirme'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

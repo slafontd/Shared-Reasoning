@@ -15,6 +15,8 @@ export type Curso = {
   // US12: código para encontrar el curso e inscribirse. Solo llega para
   // quien creó el curso o un administrador; para el resto es null.
   codigoAcceso: string | null
+  // US13: si el usuario actual está inscrito en el curso.
+  inscrito: boolean
 }
 
 type CursoAPI = {
@@ -26,6 +28,7 @@ type CursoAPI = {
   creado_por_nombre: string
   fecha_creacion: string
   codigo_acceso: string | null
+  inscrito?: boolean
 }
 
 function aCurso(c: CursoAPI): Curso {
@@ -38,6 +41,7 @@ function aCurso(c: CursoAPI): Curso {
     creadoPorNombre: c.creado_por_nombre,
     fechaCreacion: c.fecha_creacion,
     codigoAcceso: c.codigo_acceso ?? null,
+    inscrito: c.inscrito ?? false,
   }
 }
 
@@ -82,4 +86,23 @@ export async function buscarCursoPorCodigo(codigo: string): Promise<Curso> {
   const res = await fetchAutenticado(`${API_URL}/cursos/codigo/${encodeURIComponent(codigo.trim())}`)
   if (!res.ok) throw new Error(await mensajeDeError(res))
   return aCurso(await res.json())
+}
+
+// US13 (#16): inscribe al estudiante con el código de acceso del curso.
+// 404 si el código no existe, 409 si ya estaba inscrito, 403 si no es estudiante.
+export async function inscribirseCurso(codigo: string): Promise<Curso> {
+  const res = await fetchAutenticado(`${API_URL}/cursos/inscripciones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codigo: codigo.trim() }),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return aCurso(await res.json())
+}
+
+// US13 (#16): cursos en los que el usuario está inscrito.
+export async function listarMisCursos(): Promise<Curso[]> {
+  const res = await fetchAutenticado(`${API_URL}/cursos/mis-cursos`)
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return ((await res.json()) as CursoAPI[]).map(aCurso)
 }

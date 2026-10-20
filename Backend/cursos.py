@@ -1,4 +1,4 @@
-"""Cursos (US08 crear, #11 · US09 consultar, #12 · US11 eliminar · US12 buscar por código, #15).
+"""Cursos (US08 crear, #11 · US09 consultar, #12 · US11 eliminar · US12 buscar por código, #15 · US13 inscribirse, #16).
 
 Router aparte de main.py para no seguir engordando ese archivo; se monta con
 app.include_router(cursos.router).
@@ -9,15 +9,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth import obtener_usuario_actual, requerir_rol
 from codigos_curso import normalizar_codigo, nuevo_codigo_unico
 from db.database import get_db
-from db.models import Curso, Usuario
+from db.models import Curso, Inscripcion, Usuario
 from rate_limit import verificar_frecuencia
-from roles import ADMINISTRADOR, PROFESOR
-from schemas.cursos import CursoCrear, CursoResponse
+from roles import ADMINISTRADOR, ESTUDIANTE, PROFESOR
+from schemas.cursos import CursoCrear, CursoResponse, InscripcionCrear
 
 router = APIRouter(prefix="/cursos", tags=["cursos"])
 
@@ -44,7 +45,16 @@ def gestiona_curso(usuario: Usuario, curso: Curso) -> bool:
     return usuario.rol == ADMINISTRADOR or curso.creado_por == usuario.id
 
 
-def a_respuesta(curso: Curso, usuario: Usuario) -> CursoResponse:
+def esta_inscrito(db: Session, usuario: Usuario, curso_id) -> bool:
+    return (
+        db.query(Inscripcion.id)
+        .filter(Inscripcion.usuario_id == usuario.id, Inscripcion.curso_id == curso_id)
+        .first()
+        is not None
+    )
+
+
+def a_respuesta(curso: Curso, usuario: Usuario, inscrito: bool = False) -> CursoResponse:
     return CursoResponse(
         id=curso.id,
         nombre=curso.nombre,
@@ -54,6 +64,7 @@ def a_respuesta(curso: Curso, usuario: Usuario) -> CursoResponse:
         creado_por_nombre=curso.creador.nombre,
         fecha_creacion=curso.fecha_creacion,
         codigo_acceso=curso.codigo_acceso if gestiona_curso(usuario, curso) else None,
+        inscrito=inscrito,
     )
 
 
@@ -110,7 +121,14 @@ def listar_cursos(
         .limit(limite)
         .all()
     )
-    return [a_respuesta(c, usuario) for c in cursos]
+    ids_inscritos = {
+        fila.curso_id
+        for fila in db.query(Inscripcion.curso_id).filter(
+            Inscripcion.usuario_id == usuario.id,
+            Inscripcion.curso_id.in_([c.id for c in cursos]),
+        )
+    }
+    return [a_respuesta(c, usuario, c.id in ids_inscritos) for c in cursos]
 
 
 @router.get("/codigo/{codigo}", response_model=CursoResponse)
@@ -130,7 +148,49 @@ def buscar_por_codigo(
     )
     if curso is None:
         raise HTTPException(status_code=404, detail="No existe ningún curso con ese código. Revisa que esté bien escrito.")
-    return a_respuesta(curso, usuario)
+    return a_respuesta(curso, usuario, esta_inscrito(db, usuario, curso.id))
+
+
+@router.post("/inscripciones", response_model=CursoResponse, status_code=201)
+def inscribirse(
+    datos: InscripcionCrear,
+    # US13 (#16): "como estudiante, quiero inscribirme". Un profesor o un
+    # administrador no se inscribe a cursos: los crea o los administra.
+    usuario: Usuario = Depends(requerir_rol(ESTUDIANTE)),
+    db: Session = Depends(get_db),
+):
+    verificar_frecuencia(f"user:{usuario.id}")
+    curso = db.query(Curso).filter(Curso.codigo_acceso == normalizar_codigo(datos.codigo)).first()
+    if curso is None:
+        raise HTTPException(status_code=404, detail="No existe ningún curso con ese código. Revisa que esté bien escrito.")
+    if esta_inscrito(db, usuario, curso.id):
+        raise HTTPException(status_code=409, detail="Ya estás inscrito en este curso.")
+
+    db.add(Inscripcion(usuario_id=usuario.id, curso_id=curso.id))
+    try:
+        db.commit()
+    except IntegrityError:
+        # Doble clic / dos pestañas: la restricción única de la BD es la garantía final.
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ya estás inscrito en este curso.")
+    return a_respuesta(curso, usuario, inscrito=True)
+
+
+@router.get("/mis-cursos", response_model=list[CursoResponse])
+def mis_cursos(
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    """US13 (#16): los cursos en los que está inscrito el usuario, del más
+    reciente al más antiguo según la fecha de inscripción. Debe declararse
+    ANTES de /{curso_id}: si no, "mis-cursos" se intentaría leer como UUID."""
+    inscripciones = (
+        db.query(Inscripcion)
+        .filter(Inscripcion.usuario_id == usuario.id)
+        .order_by(Inscripcion.fecha_inscripcion.desc(), Inscripcion.id)
+        .all()
+    )
+    return [a_respuesta(i.curso, usuario, inscrito=True) for i in inscripciones]
 
 
 @router.get("/{curso_id}", response_model=CursoResponse)
@@ -142,7 +202,7 @@ def obtener_curso(
     curso = db.get(Curso, curso_id)
     if curso is None:
         raise HTTPException(status_code=404, detail="Curso no encontrado.")
-    return a_respuesta(curso, usuario)
+    return a_respuesta(curso, usuario, esta_inscrito(db, usuario, curso.id))
 
 
 @router.delete("/{curso_id}", status_code=204)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -158,3 +158,28 @@ class Curso(Base):
     codigo_acceso = Column(String(12), nullable=False, unique=True)
 
     creador = relationship("Usuario", lazy="joined")
+
+
+class Inscripcion(Base):
+    """Estudiante inscrito en un curso (US13, #16) — se inscribe con el
+    código de acceso del curso (US12). Si se borra el curso o el usuario,
+    la inscripción desaparece con él."""
+    __tablename__ = "inscripciones"
+    __table_args__ = (UniqueConstraint("usuario_id", "curso_id", name="uq_inscripciones_usuario_curso"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    curso_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cursos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_inscripcion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    curso = relationship("Curso", lazy="joined")
