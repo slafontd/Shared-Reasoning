@@ -12,6 +12,9 @@ export type Curso = {
   creadoPor: string
   creadoPorNombre: string
   fechaCreacion: string
+  // US12: código para encontrar el curso e inscribirse. Solo llega para
+  // quien creó el curso o un administrador; para el resto es null.
+  codigoAcceso: string | null
 }
 
 type CursoAPI = {
@@ -22,6 +25,7 @@ type CursoAPI = {
   creado_por: string
   creado_por_nombre: string
   fecha_creacion: string
+  codigo_acceso: string | null
 }
 
 function aCurso(c: CursoAPI): Curso {
@@ -33,6 +37,7 @@ function aCurso(c: CursoAPI): Curso {
     creadoPor: c.creado_por,
     creadoPorNombre: c.creado_por_nombre,
     fechaCreacion: c.fecha_creacion,
+    codigoAcceso: c.codigo_acceso ?? null,
   }
 }
 
@@ -69,4 +74,12 @@ export async function listarCursos(opciones: { busqueda?: string; desplazamiento
 export async function eliminarCurso(id: string): Promise<void> {
   const res = await fetchAutenticado(`${API_URL}/cursos/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await mensajeDeError(res))
+}
+
+// US12 (#15): busca un curso por el código de acceso que compartió el
+// profesor. Lanza error con el mensaje del backend si no existe (404).
+export async function buscarCursoPorCodigo(codigo: string): Promise<Curso> {
+  const res = await fetchAutenticado(`${API_URL}/cursos/codigo/${encodeURIComponent(codigo.trim())}`)
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return aCurso(await res.json())
 }

@@ -151,5 +151,10 @@ class Curso(Base):
         index=True,
     )
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Código para encontrar el curso e inscribirse (US12/US13), estilo
+    # Google Classroom: lo genera el sistema al crear el curso y el profesor
+    # lo comparte. Es distinto de `codigo` (el de la materia, opcional y que
+    # se repite entre grupos) — este es único por curso. Ver codigos_curso.py.
+    codigo_acceso = Column(String(12), nullable=False, unique=True)
 
     creador = relationship("Usuario", lazy="joined")

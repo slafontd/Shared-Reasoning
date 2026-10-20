@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound, Copy, Check } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
-import { crearCurso, listarCursos, eliminarCurso, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
+import { crearCurso, listarCursos, eliminarCurso, buscarCursoPorCodigo, CURSOS_POR_PAGINA, type Curso } from '../api/cursos'
 import type { Usuario } from '../api/auth'
 
 type Props = {
@@ -19,7 +19,8 @@ const DESCRIPCION_MAX = 2000
 const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)', color: 'var(--ink)' }
 
 // ============================================================
-//  Cursos: crear (US08, #11) y consultar (US09, #12).
+//  Cursos: crear (US08, #11), consultar (US09, #12), eliminar (US11)
+//  y buscar por código de acceso (US12, #15).
 // ============================================================
 function Cursos({ usuario, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
@@ -39,6 +40,7 @@ function Cursos({ usuario, onVolver }: Props) {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
   const [seleccionado, setSeleccionado] = useState<Curso | null>(null)
+  const [buscarCodigoAbierto, setBuscarCodigoAbierto] = useState(false)
 
   // Consulta (US09, #12): la búsqueda se hace en el backend (nombre o código,
   // sin mayúsculas ni tildes) con una pausa de 300 ms para no pedir en cada tecla.
@@ -134,6 +136,17 @@ function Cursos({ usuario, onVolver }: Props) {
               style={estiloCampo}
             />
           </div>
+          {/* US12: quien no crea cursos llega a ellos con el código que le
+              compartió su profesor. */}
+          {!puedeCrear && (
+            <button
+              onClick={() => setBuscarCodigoAbierto(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
+            >
+              <KeyRound size={15} />
+              Unirme con código
+            </button>
+          )}
           {puedeCrear && (
             <button
               onClick={() => setModalAbierto(true)}
@@ -152,7 +165,12 @@ function Cursos({ usuario, onVolver }: Props) {
             style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.4)' }}
           >
             <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
-            <span className="flex-1">Curso «{recienCreado.nombre}» creado.</span>
+            <span className="flex-1">
+              Curso «{recienCreado.nombre}» creado.
+              {recienCreado.codigoAcceso && (
+                <> Código de acceso para tus estudiantes: <strong className="font-mono tracking-widest">{recienCreado.codigoAcceso}</strong></>
+              )}
+            </span>
             <button onClick={() => setRecienCreado(null)} className="grid place-items-center w-6 h-6 rounded hover:bg-black/5" title="Cerrar aviso">
               <X size={14} />
             </button>
@@ -210,6 +228,7 @@ function Cursos({ usuario, onVolver }: Props) {
       </main>
 
       {modalAbierto && <ModalCrearCurso onCerrar={() => setModalAbierto(false)} onCreado={alCrear} />}
+      {buscarCodigoAbierto && <ModalBuscarPorCodigo onCerrar={() => setBuscarCodigoAbierto(false)} />}
       {seleccionado && (
         <ModalDetalleCurso
           curso={seleccionado}
@@ -306,6 +325,7 @@ function ModalDetalleCurso({ curso, onCerrar, puedeEliminar, onEliminar }: {
         <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
           Creado por {curso.creadoPorNombre} el {fechaLegible(curso.fechaCreacion)}
         </p>
+        {curso.codigoAcceso && <CodigoAcceso codigo={curso.codigoAcceso} />}
         {puedeEliminar && (
           <button
             onClick={onEliminar}
@@ -315,6 +335,115 @@ function ModalDetalleCurso({ curso, onCerrar, puedeEliminar, onEliminar }: {
             <Trash2 size={13} />
             Eliminar curso
           </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// US12: el código que el profesor comparte con sus estudiantes. Solo llega
+// del backend para quien creó el curso o un administrador.
+function CodigoAcceso({ codigo }: { codigo: string }) {
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(codigo)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 1500)
+    } catch {
+      // Sin permiso de portapapeles: el código igual queda a la vista.
+    }
+  }
+
+  return (
+    <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--bg1)', border: '1px dashed var(--border)' }}>
+      <KeyRound size={18} style={{ color: 'var(--accent)' }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Código de acceso · compártelo con tus estudiantes</p>
+        <p className="font-mono text-lg font-semibold tracking-[0.2em]" data-testid="codigo-acceso">{codigo}</p>
+      </div>
+      <button onClick={copiar} className="grid place-items-center w-8 h-8 rounded-lg hover:bg-black/5 transition" title="Copiar código">
+        {copiado ? <Check size={16} style={{ color: '#16a34a' }} /> : <Copy size={16} />}
+      </button>
+    </div>
+  )
+}
+
+// US12 (#15): el estudiante escribe el código y ve el curso — o un aviso
+// claro si no existe.
+function ModalBuscarPorCodigo({ onCerrar }: { onCerrar: () => void }) {
+  const [codigo, setCodigo] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [encontrado, setEncontrado] = useState<Curso | null>(null)
+
+  async function buscar() {
+    setError(null)
+    setEncontrado(null)
+    if (!codigo.trim()) {
+      setError('Escribe el código que te compartió tu profesor.')
+      return
+    }
+    setBuscando(true)
+    try {
+      setEncontrado(await buscarCursoPorCodigo(codigo))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo buscar el curso.')
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 grid place-items-center p-4" style={{ background: 'rgba(0,0,0,.5)' }} onClick={onCerrar}>
+      <div
+        role="dialog"
+        aria-label="Unirme con código"
+        onClick={(e) => e.stopPropagation()}
+        className="panel rounded-2xl p-6 w-full max-w-md space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Unirme a un curso</p>
+          <button type="button" onClick={onCerrar} className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5" title="Cerrar">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); buscar() }} className="flex gap-2">
+          <input
+            autoFocus
+            value={codigo}
+            onChange={(e) => { setCodigo(e.target.value); setError(null) }}
+            maxLength={20}
+            placeholder="Código del curso (ej. K7P2QX)"
+            aria-label="Código del curso"
+            className="flex-1 min-w-0 rounded-xl px-3 py-2 text-sm outline-none font-mono uppercase placeholder:normal-case placeholder:font-sans"
+            style={estiloCampo}
+          />
+          <button
+            type="submit"
+            disabled={buscando}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 disabled:opacity-50 transition"
+          >
+            {buscando ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+            Buscar
+          </button>
+        </form>
+
+        {error && <p role="alert" className="text-sm" style={{ color: '#dc2626' }}>{error}</p>}
+
+        {encontrado && (
+          <div className="rounded-xl p-4 space-y-1" style={{ background: 'var(--bg1)', border: '1px solid var(--border)' }} data-testid="curso-encontrado">
+            <div className="flex items-start gap-2">
+              <h3 className="font-semibold flex-1 break-words">{encontrado.nombre}</h3>
+              {encontrado.codigo && <EtiquetaCodigo codigo={encontrado.codigo} />}
+            </div>
+            {encontrado.descripcion && (
+              <p className="text-sm line-clamp-3 whitespace-pre-line" style={{ color: 'var(--ink-soft)' }}>{encontrado.descripcion}</p>
+            )}
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Profesor: {encontrado.creadoPorNombre}</p>
+          </div>
         )}
       </div>
     </div>

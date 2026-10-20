@@ -2,7 +2,7 @@
 
 import uuid
 
-from conftest import registrar, crear_usuario
+from conftest import crear_usuario
 
 
 def crear(cliente, cabeceras, nombre, codigo=None):

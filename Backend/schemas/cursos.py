@@ -40,3 +40,7 @@ class CursoResponse(BaseModel):
     creado_por: UUID
     creado_por_nombre: str
     fecha_creacion: datetime
+    # Solo lo ven quien creó el curso y los administradores (US12): es lo que
+    # el profesor comparte para que sus estudiantes se inscriban. Para el
+    # resto viene en null — conocerlo es justamente lo que da acceso.
+    codigo_acceso: str | None = None
