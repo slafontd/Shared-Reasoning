@@ -183,3 +183,29 @@ class Inscripcion(Base):
     fecha_inscripcion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     curso = relationship("Curso", lazy="joined")
+
+
+class Ejercicio(Base):
+    """Ejercicio de un curso. Base mínima creada para US17 (eliminar
+    ejercicio, #21): título y enunciado. Crear y consultar ejercicios con
+    todo su detalle corresponde a US14/US15 — que extiendan este modelo en
+    vez de crear otro. Si se borra el curso, sus ejercicios se van con él."""
+    __tablename__ = "ejercicios"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    curso_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cursos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    titulo = Column(String(150), nullable=False)
+    enunciado = Column(Text, nullable=True)
+    creado_por = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    curso = relationship("Curso", lazy="joined")

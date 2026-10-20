@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound, Copy, Check, ClipboardList } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
 import {
@@ -7,6 +7,7 @@ import {
   CURSOS_POR_PAGINA, type Curso,
 } from '../api/cursos'
 import type { Usuario } from '../api/auth'
+import { listarEjercicios, crearEjercicio, eliminarEjercicio, type Ejercicio } from '../api/ejercicios'
 
 type Props = {
   usuario: Usuario | null
@@ -29,7 +30,8 @@ const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)
 
 // ============================================================
 //  Cursos: crear (US08, #11), consultar (US09, #12), eliminar (US11)
-//  buscar por código de acceso (US12, #15) e inscribirse (US13, #16).
+//  buscar por código de acceso (US12, #15), inscribirse (US13, #16)
+//  y eliminar ejercicios (US17, #21).
 // ============================================================
 function Cursos({ usuario, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
@@ -397,6 +399,9 @@ function ModalDetalleCurso({ curso, onCerrar, puedeEliminar, onEliminar }: {
           Creado por {curso.creadoPorNombre} el {fechaLegible(curso.fechaCreacion)}
         </p>
         {curso.codigoAcceso && <CodigoAcceso codigo={curso.codigoAcceso} />}
+        {/* US17: los ejercicios los ven el profesor del curso, los
+            administradores y los estudiantes inscritos (US13). */}
+        {(puedeEliminar || curso.inscrito) && <SeccionEjercicios cursoId={curso.id} puedeGestionar={puedeEliminar} />}
         {puedeEliminar && (
           <button
             onClick={onEliminar}
@@ -547,6 +552,153 @@ function ModalBuscarPorCodigo({ onCerrar, onInscrito }: { onCerrar: () => void; 
         )}
       </div>
     </div>
+  )
+}
+
+// ============================================================
+//  Ejercicios del curso (US17 eliminar, #21). Crear aquí es la base
+//  mínima para tener qué eliminar; US14/US15 la amplían.
+// ============================================================
+function SeccionEjercicios({ cursoId, puedeGestionar }: { cursoId: string; puedeGestionar: boolean }) {
+  const [ejercicios, setEjercicios] = useState<Ejercicio[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  // Id del ejercicio que espera confirmación para eliminarse.
+  const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [titulo, setTitulo] = useState('')
+  const [enunciado, setEnunciado] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    let cancelado = false
+    listarEjercicios(cursoId)
+      .then((lista) => !cancelado && setEjercicios(lista))
+      .catch((e) => !cancelado && setError(e instanceof Error ? e.message : 'No se pudieron cargar los ejercicios.'))
+    return () => { cancelado = true }
+  }, [cursoId])
+
+  async function confirmarEliminar(ejercicio: Ejercicio) {
+    setError(null)
+    setEliminando(true)
+    try {
+      await eliminarEjercicio(ejercicio.id)
+      setEjercicios((actuales) => (actuales ?? []).filter((e) => e.id !== ejercicio.id))
+      setAviso(`Ejercicio «${ejercicio.titulo}» eliminado.`)
+      setPorConfirmar(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el ejercicio.')
+    } finally {
+      setEliminando(false)
+    }
+  }
+
+  async function agregar() {
+    if (titulo.trim().length < 3) {
+      setError('El título del ejercicio debe tener al menos 3 caracteres.')
+      return
+    }
+    setError(null)
+    setGuardando(true)
+    try {
+      const nuevo = await crearEjercicio(cursoId, { titulo: titulo.trim(), enunciado: enunciado.trim() || undefined })
+      setEjercicios((actuales) => [...(actuales ?? []), nuevo])
+      setTitulo('')
+      setEnunciado('')
+      setAviso(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo crear el ejercicio.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <section className="space-y-2 pt-2" style={{ borderTop: '1px solid var(--border)' }} aria-label="Ejercicios">
+      <h3 className="text-sm font-semibold flex items-center gap-1.5 pt-2">
+        <ClipboardList size={15} style={{ color: 'var(--accent)' }} /> Ejercicios
+      </h3>
+
+      {aviso && <p role="status" className="text-xs" style={{ color: '#15803d' }}>{aviso}</p>}
+      {error && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}
+
+      {ejercicios === null ? (
+        !error && <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}><Loader2 size={12} className="animate-spin" /> Cargando…</p>
+      ) : ejercicios.length === 0 ? (
+        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Este curso todavía no tiene ejercicios.</p>
+      ) : (
+        <ul className="space-y-2">
+          {ejercicios.map((e) => (
+            <li key={e.id} className="rounded-xl p-3" style={{ background: 'var(--bg1)', border: '1px solid var(--border)' }}>
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium break-words">{e.titulo}</p>
+                  {e.enunciado && <p className="text-xs whitespace-pre-line break-words mt-0.5" style={{ color: 'var(--ink-soft)' }}>{e.enunciado}</p>}
+                </div>
+                {puedeGestionar && porConfirmar !== e.id && (
+                  <button
+                    onClick={() => { setPorConfirmar(e.id); setAviso(null) }}
+                    className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition shrink-0"
+                    style={{ color: '#dc2626' }}
+                    title="Eliminar ejercicio"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+              {/* US17: el sistema solicita confirmación antes de eliminar. */}
+              {porConfirmar === e.id && (
+                <div role="alertdialog" aria-label={`Confirmar eliminación de ${e.titulo}`} className="mt-2 rounded-lg p-2 flex flex-wrap items-center gap-2" style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.3)' }}>
+                  <span className="text-xs flex-1 min-w-40">¿Eliminar este ejercicio? Los estudiantes dejarán de verlo. No se puede deshacer.</span>
+                  <button onClick={() => setPorConfirmar(null)} disabled={eliminando} className="px-2.5 py-1 rounded-lg text-xs hover:bg-black/5 transition">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => confirmarEliminar(e)}
+                    disabled={eliminando}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-white transition disabled:opacity-50"
+                    style={{ background: '#dc2626' }}
+                  >
+                    {eliminando && <Loader2 size={12} className="animate-spin" />}
+                    Sí, eliminar
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {puedeGestionar && (
+        <form onSubmit={(ev) => { ev.preventDefault(); agregar() }} className="space-y-2 pt-1" aria-label="Agregar ejercicio">
+          <input
+            value={titulo}
+            onChange={(ev) => setTitulo(ev.target.value)}
+            maxLength={150}
+            placeholder="Título del nuevo ejercicio"
+            className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+            style={estiloCampo}
+          />
+          <textarea
+            value={enunciado}
+            onChange={(ev) => setEnunciado(ev.target.value)}
+            maxLength={5000}
+            rows={2}
+            placeholder="Enunciado (opcional)"
+            className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-y"
+            style={estiloCampo}
+          />
+          <button
+            type="submit"
+            disabled={guardando || titulo.trim().length < 3}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg accent-bg text-white text-xs font-medium shadow hover:brightness-110 disabled:opacity-40 transition"
+          >
+            {guardando ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+            Agregar ejercicio
+          </button>
+        </form>
+      )}
+    </section>
   )
 }
 
