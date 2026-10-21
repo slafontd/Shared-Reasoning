@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import {
-  ArrowLeft, Sun, Moon, Loader2, GraduationCap, Trash2, ClipboardList, ImagePlus, Plus, X, ChevronDown, Lock,
+  ArrowLeft, Sun, Moon, Loader2, GraduationCap, Trash2, ClipboardList, ImagePlus, Plus, X, ChevronDown, Lock, Pencil, Check,
 } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
 import type { Usuario } from '../api/auth'
 import { eliminarCurso, type Curso } from '../api/cursos'
 import {
-  listarEjercicios, crearEjercicio, eliminarEjercicio, subirImagenEjercicio, eliminarImagenEjercicio, cargarImagenEjercicio,
+  listarEjercicios, crearEjercicio, actualizarEjercicio, eliminarEjercicio, subirImagenEjercicio, eliminarImagenEjercicio, cargarImagenEjercicio,
   MAX_IMAGENES_POR_EJERCICIO, MAX_BYTES_IMAGEN, TIPOS_IMAGEN, type Ejercicio, type ImagenEjercicio, type Solucion,
 } from '../api/ejercicios'
 import { MiniaturaArchivo, VisorImagen, validarArchivos } from './ArchivosAutenticados'
@@ -227,6 +227,40 @@ function TarjetaEjercicio({
   const [confirmando, setConfirmando] = useState(false)
   const [eliminando, setEliminando] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
+  const [editando, setEditando] = useState(false)
+  const [titulo, setTitulo] = useState('')
+  const [enunciado, setEnunciado] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  // Si el acordeón se cierra a media edición, el formulario deja de mostrarse
+  // (y vuelve el lápiz); el borrador se conserva al reabrirlo.
+  const enEdicion = editando && abierto
+
+  function abrirEdicion() {
+    setTitulo(ejercicio.titulo)
+    setEnunciado(ejercicio.enunciado ?? '')
+    onError(null)
+    setEditando(true)
+  }
+
+  // US16: los cambios se guardan en el servidor y la tarjeta muestra de
+  // inmediato la versión nueva (los estudiantes la ven al abrir el curso).
+  async function guardarEdicion() {
+    if (titulo.trim().length < 3) {
+      onError('El título del ejercicio debe tener al menos 3 caracteres.')
+      return
+    }
+    onError(null)
+    setGuardando(true)
+    try {
+      const nuevo = await actualizarEjercicio(ejercicio.id, { titulo: titulo.trim(), enunciado: enunciado.trim() || null })
+      onCambio({ titulo: nuevo.titulo, enunciado: nuevo.enunciado, fechaActualizacion: nuevo.fechaActualizacion })
+      setEditando(false)
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'No se pudo actualizar el ejercicio.')
+    } finally {
+      setGuardando(false)
+    }
+  }
 
   async function eliminar() {
     onError(null)
@@ -298,8 +332,12 @@ function TarjetaEjercicio({
           </span>
           <span className="flex-1 min-w-0">
             <span className="block text-sm font-semibold break-words">{ejercicio.titulo}</span>
-            {ejercicio.imagenes.length > 0 && (
-              <span className="text-[11px]" style={{ color: 'var(--ink-soft)' }}>{ejercicio.imagenes.length} {ejercicio.imagenes.length === 1 ? 'imagen' : 'imágenes'}</span>
+            {(ejercicio.imagenes.length > 0 || ejercicio.fechaActualizacion) && (
+              <span className="text-[11px]" style={{ color: 'var(--ink-soft)' }}>
+                {ejercicio.imagenes.length > 0 && `${ejercicio.imagenes.length} ${ejercicio.imagenes.length === 1 ? 'imagen' : 'imágenes'}`}
+                {ejercicio.imagenes.length > 0 && ejercicio.fechaActualizacion && ' · '}
+                {ejercicio.fechaActualizacion && `actualizado el ${fechaLegible(ejercicio.fechaActualizacion)}`}
+              </span>
             )}
           </span>
           {esEstudiante && (
@@ -317,6 +355,16 @@ function TarjetaEjercicio({
           )}
           <ChevronDown size={16} className="transition-transform shrink-0" style={{ transform: abierto ? 'rotate(180deg)' : 'none', color: 'var(--ink-soft)' }} />
         </button>
+        {puedeAdjuntar && !enEdicion && (
+          <button
+            onClick={() => { if (!abierto) onAlternar(); abrirEdicion() }}
+            className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition shrink-0"
+            style={{ color: 'var(--ink-soft)' }}
+            title="Editar ejercicio"
+          >
+            <Pencil size={14} />
+          </button>
+        )}
         {puedeEliminar && !confirmando && (
           <button onClick={() => setConfirmando(true)} className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition shrink-0" style={{ color: '#dc2626' }} title="Eliminar ejercicio">
             <Trash2 size={14} />
@@ -338,7 +386,41 @@ function TarjetaEjercicio({
 
       {abierto && (
         <div className="px-4 pb-4 anim-slide-up">
-          {ejercicio.enunciado ? (
+          {enEdicion ? (
+            <form onSubmit={(ev) => { ev.preventDefault(); guardarEdicion() }} className="space-y-2 anim-slide-up" aria-label="Editar ejercicio">
+              <input
+                value={titulo}
+                onChange={(ev) => setTitulo(ev.target.value)}
+                maxLength={150}
+                aria-label="Título del ejercicio"
+                className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                style={estiloCampo}
+              />
+              <textarea
+                value={enunciado}
+                onChange={(ev) => setEnunciado(ev.target.value)}
+                maxLength={5000}
+                rows={4}
+                aria-label="Enunciado"
+                placeholder="Enunciado (opcional)"
+                className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-y"
+                style={estiloCampo}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={guardando || titulo.trim().length < 3}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg accent-bg text-white text-xs font-medium shadow hover:brightness-110 disabled:opacity-40 transition"
+                >
+                  {guardando ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  Guardar cambios
+                </button>
+                <button type="button" onClick={() => setEditando(false)} disabled={guardando} className="px-2.5 py-1.5 rounded-lg text-xs hover:bg-black/5 transition">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          ) : ejercicio.enunciado ? (
             <p className="text-sm whitespace-pre-line break-words">{ejercicio.enunciado}</p>
           ) : (
             <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Este ejercicio no tiene enunciado escrito.</p>

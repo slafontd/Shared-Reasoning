@@ -2,7 +2,8 @@
 enunciado y soluciones de los estudiantes.
 
 Permisos:
-- Crear ejercicios y adjuntarles imágenes: SOLO el profesor que creó el curso.
+- Crear y actualizar (US16) ejercicios y adjuntarles imágenes: SOLO el
+  profesor que creó el curso.
 - Eliminar un ejercicio o sus imágenes: ese profesor, o un administrador
   (mismo criterio que eliminar un curso, US11).
 - Ver: además, los estudiantes inscritos en el curso (US13).
@@ -25,7 +26,7 @@ from db.models import Curso, Ejercicio, EjercicioImagen, Solucion, SolucionArchi
 from rate_limit import verificar_frecuencia
 from roles import ESTUDIANTE, PROFESOR
 from schemas.ejercicios import (
-    EjercicioCrear, EjercicioResponse, ImagenEjercicioResponse, SolucionResponse,
+    EjercicioActualizar, EjercicioCrear, EjercicioResponse, ImagenEjercicioResponse, SolucionResponse,
 )
 
 router = APIRouter(tags=["ejercicios"])
@@ -50,9 +51,9 @@ def _es_profesor_del_curso(usuario: Usuario, curso: Curso) -> bool:
     return usuario.rol == PROFESOR and curso.creado_por == usuario.id
 
 
-def _exigir_profesor_del_curso(usuario: Usuario, curso: Curso) -> None:
+def _exigir_profesor_del_curso(usuario: Usuario, curso: Curso, accion: str = "crear ejercicios y adjuntarles imágenes") -> None:
     if not _es_profesor_del_curso(usuario, curso):
-        raise HTTPException(status_code=403, detail="Solo el profesor del curso puede crear ejercicios y adjuntarles imágenes.")
+        raise HTTPException(status_code=403, detail=f"Solo el profesor del curso puede {accion}.")
 
 
 def _exigir_gestion(usuario: Usuario, curso: Curso) -> None:
@@ -134,6 +135,39 @@ def crear_ejercicio(
     db.refresh(ejercicio)
     respuesta = EjercicioResponse.model_validate(ejercicio)
     respuesta.total_soluciones = 0
+    return respuesta
+
+
+@router.patch("/ejercicios/{ejercicio_id}", response_model=EjercicioResponse)
+def actualizar_ejercicio(
+    ejercicio_id: UUID,
+    datos: EjercicioActualizar,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    """US16: el profesor del curso modifica el título y/o el enunciado. Los
+    cambios se guardan y los estudiantes ven de inmediato la versión nueva
+    (el listado siempre lee lo almacenado). Las imágenes se gestionan aparte
+    (POST/DELETE de /ejercicios/.../imagenes) y las soluciones ya entregadas
+    se conservan."""
+    verificar_frecuencia(f"user:{usuario.id}")
+    ejercicio = db.get(Ejercicio, ejercicio_id)
+    if ejercicio is None:
+        raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
+    _exigir_profesor_del_curso(usuario, ejercicio.curso, "modificar ejercicios")
+
+    if "titulo" in datos.model_fields_set:
+        ejercicio.titulo = datos.titulo
+    if "enunciado" in datos.model_fields_set:
+        ejercicio.enunciado = datos.enunciado
+    ejercicio.fecha_actualizacion = func.now()
+    db.commit()
+    db.refresh(ejercicio)
+
+    respuesta = EjercicioResponse.model_validate(ejercicio)
+    respuesta.total_soluciones = (
+        db.query(func.count(Solucion.id)).filter(Solucion.ejercicio_id == ejercicio.id).scalar() or 0
+    )
     return respuesta
 
 

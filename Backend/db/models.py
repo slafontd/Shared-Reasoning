@@ -208,6 +208,9 @@ class Ejercicio(Base):
         nullable=False,
     )
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # US16: cuándo el profesor modificó el ejercicio por última vez (None si
+    # nunca se editó). Los estudiantes la ven como «actualizado».
+    fecha_actualizacion = Column(DateTime(timezone=True), nullable=True)
 
     curso = relationship("Curso", lazy="joined")
     # Imágenes adjuntas al enunciado. selectin + `datos` diferido: listar los

@@ -53,6 +53,8 @@ export type Ejercicio = {
   titulo: string
   enunciado: string | null
   fechaCreacion: string
+  // US16: cuándo lo editó el profesor por última vez (null si nunca).
+  fechaActualizacion: string | null
   imagenes: ImagenEjercicio[]
   // Para un estudiante: su solución (null si aún no entrega).
   miSolucion: Solucion | null
@@ -66,6 +68,7 @@ type EjercicioAPI = {
   titulo: string
   enunciado: string | null
   fecha_creacion: string
+  fecha_actualizacion?: string | null
   imagenes?: ImagenEjercicio[]
   mi_solucion?: SolucionAPI | null
   total_soluciones?: number | null
@@ -78,6 +81,7 @@ function aEjercicio(e: EjercicioAPI): Ejercicio {
     titulo: e.titulo,
     enunciado: e.enunciado,
     fechaCreacion: e.fecha_creacion,
+    fechaActualizacion: e.fecha_actualizacion ?? null,
     imagenes: e.imagenes ?? [],
     miSolucion: e.mi_solucion ? aSolucion(e.mi_solucion) : null,
     totalSoluciones: e.total_soluciones ?? null,
@@ -100,6 +104,19 @@ export async function listarEjercicios(cursoId: string): Promise<Ejercicio[]> {
 export async function crearEjercicio(cursoId: string, datos: { titulo: string; enunciado?: string }): Promise<Ejercicio> {
   const res = await fetchAutenticado(`${API_URL}/cursos/${cursoId}/ejercicios`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return aEjercicio(await res.json())
+}
+
+// US16: modifica título y/o enunciado (solo el profesor que creó el curso;
+// 403 para cualquier otro). Un enunciado vacío lo borra. Las imágenes y las
+// soluciones ya entregadas no se tocan.
+export async function actualizarEjercicio(id: string, datos: { titulo?: string; enunciado?: string | null }): Promise<Ejercicio> {
+  const res = await fetchAutenticado(`${API_URL}/ejercicios/${id}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos),
   })
