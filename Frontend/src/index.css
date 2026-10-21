@@ -52,3 +52,71 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--ink) 25%, transparent) transparent;
 }
+
+/* ============================================================
+   Animaciones del proyecto Elektra (fork codigo1) — mismos keyframes y
+   tiempos que usa su interfaz: burbuja del chat (Chat.css bubbleIn),
+   puntos de "escribiendo" (dotBounce), menús que suben (menuSlideUp),
+   popovers (AppLayout.css popoverFadeIn) y fade escalonado de bloques
+   (Survey.css surveyFadeIn). Se aplican con clases .anim-*; el retraso
+   escalonado va en style={{ animationDelay }}.
+   ============================================================ */
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes menuSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes surveyFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: scale(0.4); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.anim-bubble-in { animation: bubbleIn 0.3s ease; }
+.anim-slide-up { animation: menuSlideUp 0.2s ease; }
+.anim-popover { animation: popoverFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+/* `both` mantiene el bloque oculto durante el animationDelay del escalonado. */
+.anim-fade-in { animation: surveyFadeIn 0.4s ease both; }
+.anim-fade-in-slow { animation: surveyFadeIn 0.6s ease both; }
+
+/* Indicador de "escribiendo…" (tres puntos, como .chat-loading__dot) */
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dotBounce 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* Barras de progreso (survey-progress__bar) */
+.anim-progress { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Colapsar/expandir paneles (sidebar de Elektra) */
+.anim-collapse {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-bubble-in, .anim-slide-up, .anim-popover, .anim-fade-in, .anim-fade-in-slow, .typing-dot {
+    animation: none;
+  }
+  .anim-progress, .anim-collapse { transition: none; }
+}

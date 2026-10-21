@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Plus, History, PanelLeft, ArrowLeft, ArrowRight,
   Eye, EyeOff, User, LayoutGrid, ChevronDown, X, Settings, LogOut, Share2,
@@ -700,7 +700,7 @@ function VistaPrincipal({
                 aria-label="Cerrar menú"
               />
               <div
-                className="absolute right-0 top-12 z-20 w-48 rounded-xl shadow-lg overflow-hidden py-1"
+                className="absolute right-0 top-12 z-20 w-48 rounded-xl shadow-lg overflow-hidden py-1 anim-popover"
                 style={{ background: 'var(--bg2)', border: '1px solid var(--border)' }}
               >
                 <button
@@ -967,7 +967,8 @@ function VistaPrincipal({
             >
               <ArrowLeft size={16} />
             </button>
-            <span className="text-base font-semibold" style={{ color: 'var(--accent)' }}>
+            {/* key={paso}: el número vuelve a «saltar» en cada cambio de paso. */}
+            <span key={paso} className="text-base font-semibold anim-bubble-in" style={{ color: 'var(--accent)' }}>
               Paso {paso} <span style={{ color: 'var(--ink-soft)' }}>de {total}</span>
             </span>
             <button
@@ -984,13 +985,17 @@ function VistaPrincipal({
               <ArrowRight size={16} />
             </button>
           </div>
+          {/* Progreso de la guía (barra de Elektra: el ancho se desliza). */}
+          <div className="h-1 rounded-full overflow-hidden -my-2" style={{ background: 'var(--border)' }} role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={paso} aria-label="Progreso de la guía">
+            <div className="h-full rounded-full anim-progress" style={{ width: `${total > 0 ? (paso / total) * 100 : 0}%`, background: 'var(--accent)' }} />
+          </div>
           <div className="flex items-center justify-center gap-1.5">
             {instrucciones.map((ins) => (
               <div key={ins.numero} className="relative group py-2">
                 <button
                   onClick={() => irAPaso(ins.numero)}
                   aria-label={`Paso ${ins.numero}`}
-                  className="block w-2 h-2 rounded-full transition-transform duration-150 ease-out group-hover:scale-[2.5]"
+                  className="block w-2 h-2 rounded-full transition-all duration-150 ease-out group-hover:scale-[2.5]"
                   style={{ background: ins.numero <= paso ? 'var(--accent)' : 'var(--border)' }}
                 />
                 {/* Tooltip tipo "zoom": aparece con un pop al pasar el mouse
@@ -1007,12 +1012,24 @@ function VistaPrincipal({
           </div>
 
           {instruccionActiva && (
-            <>
-              {/* Card sin borde/tinte de acento (antes era texto plano sin
-                  contorno, se perdía contra el resto del panel) — el peso
-                  bold del texto es lo que ahora lo hace resaltar. */}
-              <div className="rounded-xl p-4" style={{ background: 'var(--bg1)' }}>
-                <p className="text-sm font-bold mb-2 text-center" style={{ color: 'var(--ink)' }}>Instrucción</p>
+            // key={paso}: al cambiar de paso las tarjetas se montan de nuevo y
+            // vuelven a entrar escalonadas (surveyFadeIn de Elektra).
+            <Fragment key={paso}>
+              {/* Paso activo al estilo de la guía de Elektra: borde de acento a
+                  la izquierda y número del paso en una insignia rellena. */}
+              <div
+                className="rounded-xl p-4 anim-fade-in"
+                style={{ background: 'var(--bg1)', borderLeft: '3px solid var(--accent)', transition: 'border-color .15s ease' }}
+              >
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span
+                    className="grid place-items-center w-6 h-6 rounded-full text-xs font-bold anim-bubble-in"
+                    style={{ background: 'var(--accent)', color: 'var(--bg2)' }}
+                  >
+                    {paso}
+                  </span>
+                  <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Instrucción</p>
+                </div>
                 <p className="text-l leading-relaxed text-center ">{instruccionActiva.descripcion}</p>
               </div>
 
@@ -1021,7 +1038,7 @@ function VistaPrincipal({
                   contenido se lea más grande, en vez de competir por ancho. */}
               <div className="flex flex-col gap-4">
                 {instruccionActiva.componente_id ? (
-                  <div className="flex flex-col">
+                  <div className="flex flex-col anim-fade-in" style={{ animationDelay: '0.08s' }}>
                     <p className="text-sm font-bold mb-2 text-center" style={{ color: 'var(--ink)' }}>Componente</p>
                     <div className="rounded-xl p-4 min-h-[140px] flex flex-col items-center justify-center gap-2" style={{ background: 'var(--bg1)' }}>
                       <MiniComponente
@@ -1037,7 +1054,7 @@ function VistaPrincipal({
                 ) : instruccionActiva.tipo === 'conectar_cable' && instruccionActiva.cable ? (
                   // El jumper también es un componente (§7.B): en este paso hay
                   // que saber qué color de cable tomar, no solo a dónde va.
-                  <div className="flex flex-col">
+                  <div className="flex flex-col anim-fade-in" style={{ animationDelay: '0.08s' }}>
                     <p className="text-sm font-bold mb-2 text-center" style={{ color: 'var(--ink)' }}>Componente</p>
                     <div className="rounded-xl p-4 min-h-[140px] flex flex-col items-center justify-center gap-2" style={{ background: 'var(--bg1)' }}>
                       <MiniCable color={colorCable(instruccionActiva.cable.color)} />
@@ -1048,12 +1065,12 @@ function VistaPrincipal({
                   </div>
                 ) : null}
 
-                <div className="flex flex-col">
+                <div className="flex flex-col anim-fade-in" style={{ animationDelay: '0.16s' }}>
                   <p className="text-sm font-bold mb-2 text-center" style={{ color: 'var(--ink)' }}>Coordenadas</p>
                   <div className="rounded-xl p-4 min-h-[100px] flex items-center justify-center gap-2 flex-wrap" style={{ background: 'var(--bg1)' }}>
                     {(instruccionActiva.pines ?? (instruccionActiva.cable ? [instruccionActiva.cable.desde, instruccionActiva.cable.hasta] : []))
                       .map((p, i, arr) => (
-                        <span key={i} className="flex items-center gap-1.5">
+                        <span key={i} className="flex items-center gap-1.5 anim-bubble-in" style={{ animationDelay: `${0.24 + i * 0.08}s`, animationFillMode: 'backwards' }}>
                           <span className="px-2.5 py-1.5 rounded-lg font-mono text-sm" style={{ background: 'var(--accent)', color: 'var(--bg2)' }}>
                             {coordTexto(p.fila, p.columna)}
                           </span>
@@ -1063,7 +1080,7 @@ function VistaPrincipal({
                   </div>
                 </div>
               </div>
-            </>
+            </Fragment>
           )}
 
           {/* Componente del paso anterior (referencia — no todo el historial) */}
@@ -1076,9 +1093,9 @@ function VistaPrincipal({
               Paso anterior
             </button>
             {verComponentes && (
-              <div className="space-y-2">
+              <div className="space-y-2 anim-slide-up">
                 {componentesColocados.map((c, i) => (
-                  <div key={`${c.id}-${i}`} className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--bg1)' }}>
+                  <div key={`${c.id}-${i}`} className="rounded-xl p-3 flex items-center gap-3 anim-fade-in" style={{ background: 'var(--bg1)', animationDelay: `${Math.min(i, 6) * 0.05}s` }}>
                     <div className="shrink-0">
                       <MiniComponente kind={c.kind} valor={c.valor ?? undefined} />
                     </div>
@@ -1106,7 +1123,7 @@ function VistaPrincipal({
       {/* Biblioteca de componentes (overlay) */}
       {verBiblioteca && (
         <div className="fixed inset-0 z-50 grid place-items-center p-6" style={{ background: 'rgba(0,0,0,.5)' }} onClick={() => setVerBiblioteca(false)}>
-          <div className="rounded-2xl p-5 max-w-5xl w-full max-h-[85vh] overflow-auto shadow-2xl" style={{ background: 'var(--bg2)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-2xl p-5 max-w-5xl w-full anim-popover max-h-[85vh] overflow-auto shadow-2xl" style={{ background: 'var(--bg2)' }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm uppercase tracking-widest" style={{ color: 'var(--ink-soft)' }}>Biblioteca de componentes</h2>
               <button onClick={() => setVerBiblioteca(false)} className="grid place-items-center w-8 h-8 rounded-lg hover:bg-black/5 transition" title="Cerrar">

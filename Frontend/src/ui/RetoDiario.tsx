@@ -88,7 +88,7 @@ function RetoDiario({ onVolver }: Props) {
             </div>
 
             {enviado && (
-              <div className="panel rounded-2xl p-5 flex items-center gap-4">
+              <div className="panel rounded-2xl p-5 flex items-center gap-4 anim-fade-in-slow">
                 <Trophy size={28} style={{ color: 'var(--accent)' }} />
                 <div>
                   <p className="text-sm font-semibold">{aciertos} de {reto.preguntas.length} correctas</p>
@@ -100,6 +100,7 @@ function RetoDiario({ onVolver }: Props) {
             {reto.preguntas.map((p, i) => (
               <PreguntaCard
                 key={i}
+                indice={i}
                 pregunta={p}
                 respuesta={respuestas[i]}
                 enviado={enviado}
@@ -124,8 +125,9 @@ function RetoDiario({ onVolver }: Props) {
   )
 }
 
-function PreguntaCard({ pregunta, respuesta, enviado, correcta, onCambiar }: {
+function PreguntaCard({ pregunta, indice, respuesta, enviado, correcta, onCambiar }: {
   pregunta: PreguntaReto
+  indice: number
   respuesta: Respuesta | undefined
   enviado: boolean
   correcta: boolean | null
@@ -139,7 +141,7 @@ function PreguntaCard({ pregunta, respuesta, enviado, correcta, onCambiar }: {
   )
 
   return (
-    <div className="panel rounded-2xl p-5 space-y-3">
+    <div className="panel rounded-2xl p-5 space-y-3 anim-fade-in" style={{ animationDelay: `${indice * 0.1}s` }}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium">{pregunta.pregunta}</p>
         {enviado && (correcta ? <CheckCircle2 size={18} style={{ color: '#22c55e' }} /> : <XCircle size={18} style={{ color: '#dc2626' }} />)}

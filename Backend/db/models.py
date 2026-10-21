@@ -1,6 +1,6 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, UniqueConstraint, LargeBinary, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.sql import func
 import uuid
 from db.database import Base
@@ -131,9 +131,10 @@ class ChatMensaje(Base):
 
 
 class Curso(Base):
-    """Curso creado por un usuario (US08, #11). Crearlo está restringido a
-    administrador/profesor desde que existen roles (US06, #8, ver
-    cursos.crear_curso) — consultarlo sigue abierto a cualquier autenticado."""
+    """Curso creado por un profesor (US08, #11). Crearlo está restringido al
+    rol profesor (US06, ver cursos.crear_curso); un administrador puede
+    administrarlo y eliminarlo, y consultarlo sigue abierto a cualquier
+    autenticado."""
     __tablename__ = "cursos"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -209,3 +210,88 @@ class Ejercicio(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     curso = relationship("Curso", lazy="joined")
+    # Imágenes adjuntas al enunciado. selectin + `datos` diferido: listar los
+    # ejercicios trae solo los metadatos, nunca los bytes de cada imagen.
+    imagenes = relationship(
+        "EjercicioImagen",
+        order_by="EjercicioImagen.fecha_creacion",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
+
+
+class EjercicioImagen(Base):
+    """Imagen adjunta a un ejercicio (diagramas, esquemas, fotos del
+    enunciado). Los bytes viven en la base, igual que foto_perfil o
+    Sesion.imagen_esquema, para no depender de un bucket externo; se sirven
+    por GET /ejercicios/imagenes/{id}, con el mismo control de acceso que el
+    ejercicio. Si se borra el ejercicio, sus imágenes se van con él."""
+    __tablename__ = "ejercicio_imagenes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ejercicio_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ejercicios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    nombre = Column(String(120), nullable=False)
+    mime = Column(String(30), nullable=False)
+    tamano = Column(Integer, nullable=False)
+    datos = deferred(Column(LargeBinary, nullable=False))
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Solucion(Base):
+    """Solución que un estudiante inscrito entrega a un ejercicio: texto
+    opcional y archivos adjuntos (imágenes o PDF). Hay UNA por estudiante y
+    ejercicio — volver a enviar la reemplaza. Si se borra el ejercicio o el
+    estudiante, la solución desaparece con él."""
+    __tablename__ = "soluciones"
+    __table_args__ = (UniqueConstraint("ejercicio_id", "estudiante_id", name="uq_soluciones_ejercicio_estudiante"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ejercicio_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ejercicios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    estudiante_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    texto = Column(Text, nullable=True)
+    fecha_entrega = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    estudiante = relationship("Usuario", lazy="joined")
+    archivos = relationship(
+        "SolucionArchivo",
+        order_by="SolucionArchivo.fecha_creacion",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
+
+
+class SolucionArchivo(Base):
+    """Archivo adjunto a una solución. Los bytes viven en la base (mismo
+    criterio que EjercicioImagen) y se sirven por GET /soluciones/archivos/{id}
+    solo al estudiante dueño, al profesor del curso y a un administrador."""
+    __tablename__ = "solucion_archivos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    solucion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("soluciones.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    nombre = Column(String(120), nullable=False)
+    mime = Column(String(30), nullable=False)
+    tamano = Column(Integer, nullable=False)
+    datos = deferred(Column(LargeBinary, nullable=False))
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

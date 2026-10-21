@@ -71,10 +71,10 @@ def a_respuesta(curso: Curso, usuario: Usuario, inscrito: bool = False) -> Curso
 @router.post("", response_model=CursoResponse, status_code=201)
 def crear_curso(
     datos: CursoCrear,
-    # US06: crear un curso es una acción de docencia, no de cualquier
-    # usuario autenticado — resuelve el "decidirá más adelante" que dejó
-    # pendiente el modelo Curso (db/models.py) cuando todavía no existían roles.
-    usuario: Usuario = Depends(requerir_rol(ADMINISTRADOR, PROFESOR)),
+    # Solo los profesores crean cursos: un administrador gestiona usuarios y
+    # puede administrar/eliminar cursos ajenos (gestiona_curso), pero no los
+    # crea; un estudiante tampoco.
+    usuario: Usuario = Depends(requerir_rol(PROFESOR)),
     db: Session = Depends(get_db),
 ):
     verificar_frecuencia(f"user:{usuario.id}")
@@ -181,9 +181,18 @@ def mis_cursos(
     usuario: Usuario = Depends(obtener_usuario_actual),
     db: Session = Depends(get_db),
 ):
-    """US13 (#16): los cursos en los que está inscrito el usuario, del más
-    reciente al más antiguo según la fecha de inscripción. Debe declararse
-    ANTES de /{curso_id}: si no, "mis-cursos" se intentaría leer como UUID."""
+    """Los cursos propios del usuario. Estudiante (US13, #16): aquellos en los
+    que está inscrito, del más reciente al más antiguo según la fecha de
+    inscripción. Profesor: los que él creó. Debe declararse ANTES de
+    /{curso_id}: si no, "mis-cursos" se intentaría leer como UUID."""
+    if usuario.rol == PROFESOR:
+        propios = (
+            db.query(Curso)
+            .filter(Curso.creado_por == usuario.id)
+            .order_by(Curso.fecha_creacion.desc(), Curso.id)
+            .all()
+        )
+        return [a_respuesta(c, usuario) for c in propios]
     inscripciones = (
         db.query(Inscripcion)
         .filter(Inscripcion.usuario_id == usuario.id)

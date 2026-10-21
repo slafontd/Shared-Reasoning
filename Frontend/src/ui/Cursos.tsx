@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound, Copy, Check, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, GraduationCap, CheckCircle2, Search, Trash2, KeyRound } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
 import {
@@ -7,7 +7,8 @@ import {
   CURSOS_POR_PAGINA, type Curso,
 } from '../api/cursos'
 import type { Usuario } from '../api/auth'
-import { listarEjercicios, crearEjercicio, eliminarEjercicio, type Ejercicio } from '../api/ejercicios'
+import CursoDetalle from './CursoDetalle'
+import { EtiquetaCodigo, EtiquetaInscrito, fechaLegible } from './cursosComun'
 
 type Props = {
   usuario: Usuario | null
@@ -30,15 +31,21 @@ const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)
 
 // ============================================================
 //  Cursos: crear (US08, #11), consultar (US09, #12), eliminar (US11)
-//  buscar por código de acceso (US12, #15), inscribirse (US13, #16)
-//  y eliminar ejercicios (US17, #21).
+//  buscar por código de acceso (US12, #15), inscribirse (US13, #16).
+//  Dos pestañas: «Mis cursos» (los que creaste o a los que estás unido) y
+//  «Todos los cursos» (los de todos los profesores). Al abrir uno se llega a
+//  CursoDetalle, con sus ejercicios y las soluciones.
 // ============================================================
 function Cursos({ usuario, onVolver }: Props) {
   const [tema, setTema] = useState<Tema>('light')
-  // US06: crear un curso es una acción de docencia — el backend ya lo
-  // restringe (cursos.crear_curso), esto solo evita ofrecer un botón que
-  // terminaría en un 403 para un estudiante.
-  const puedeCrear = usuario?.rol === 'administrador' || usuario?.rol === 'profesor'
+  // Quien gestiona cursos (profesor o administrador) ve la interfaz de
+  // gestión; el resto, la de estudiante (unirse con código, "mis cursos").
+  const esDocente = usuario?.rol === 'administrador' || usuario?.rol === 'profesor'
+  // El administrador no crea ni se une a cursos: solo ve el catálogo completo.
+  const tieneMisCursos = usuario?.rol !== 'administrador'
+  // Solo los profesores crean cursos — el backend ya lo restringe
+  // (cursos.crear_curso); esto evita ofrecer un botón que terminaría en un 403.
+  const puedeCrear = usuario?.rol === 'profesor'
   // US11 (#14): un administrador puede eliminar cualquier curso; un
   // profesor, solo los que él mismo creó — mismo criterio que ya aplica el
   // backend (cursos.eliminar_curso), esto solo evita ofrecer un botón que
@@ -52,9 +59,9 @@ function Cursos({ usuario, onVolver }: Props) {
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
   const [seleccionado, setSeleccionado] = useState<Curso | null>(null)
   const [buscarCodigoAbierto, setBuscarCodigoAbierto] = useState(false)
-  // US13: un estudiante ve primero los cursos en los que está inscrito; la
-  // pestaña "Todos" es el catálogo completo (US09).
-  const [vista, setVista] = useState<'mis' | 'todos'>(puedeCrear ? 'todos' : 'mis')
+  // «Mis cursos»: para el estudiante, aquellos en los que está inscrito; para
+  // el profesor, los que creó. «Todos»: el catálogo completo (US09).
+  const [vista, setVista] = useState<'mis' | 'todos'>(tieneMisCursos ? 'mis' : 'todos')
   const [inscritoAviso, setInscritoAviso] = useState<Curso | null>(null)
 
   // Consulta (US09, #12): la búsqueda se hace en el backend (nombre o código,
@@ -129,10 +136,27 @@ function Cursos({ usuario, onVolver }: Props) {
     try {
       await eliminarCurso(curso.id)
       setCursos((actuales) => actuales.filter((c) => c.id !== curso.id))
-      setSeleccionado(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo eliminar el curso.')
     }
+  }
+
+  // Dentro de un curso: pantalla propia con sus ejercicios. Este componente
+  // sigue montado, así que al volver se conservan la pestaña y la búsqueda.
+  if (seleccionado) {
+    return (
+      <CursoDetalle
+        curso={seleccionado}
+        usuario={usuario}
+        tema={tema}
+        onCambiarTema={() => setTema((t) => (t === 'light' ? 'dark' : 'light'))}
+        onVolver={() => setSeleccionado(null)}
+        onEliminado={(c) => {
+          setCursos((actuales) => actuales.filter((x) => x.id !== c.id))
+          setSeleccionado(null)
+        }}
+      />
+    )
   }
 
   return (
@@ -169,7 +193,7 @@ function Cursos({ usuario, onVolver }: Props) {
           </div>
           {/* US12: quien no crea cursos llega a ellos con el código que le
               compartió su profesor. */}
-          {!puedeCrear && (
+          {!esDocente && (
             <button
               onClick={() => setBuscarCodigoAbierto(true)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
@@ -189,7 +213,7 @@ function Cursos({ usuario, onVolver }: Props) {
           )}
         </div>
 
-        {!puedeCrear && (
+        {tieneMisCursos && (
           <div className="flex gap-1 rounded-lg p-1 w-fit" style={{ background: 'var(--bg2)' }} role="tablist">
             {([['mis', 'Mis cursos'], ['todos', 'Todos los cursos']] as const).map(([id, etiqueta]) => (
               <button
@@ -256,7 +280,9 @@ function Cursos({ usuario, onVolver }: Props) {
               {busqueda.trim()
                 ? `Ningún curso coincide con «${busqueda.trim()}».`
                 : vista === 'mis'
-                  ? 'Todavía no estás inscrito en ningún curso. Pídele el código a tu profesor y usa «Unirme con código».'
+                  ? (puedeCrear
+                    ? 'Todavía no has creado ningún curso. Crea el primero con «Nuevo curso».'
+                    : 'Todavía no estás inscrito en ningún curso. Pídele el código a tu profesor y usa «Unirme con código», o explora «Todos los cursos».')
                 : puedeCrear
                   ? 'Todavía no hay cursos. Crea el primero con «Nuevo curso».'
                   : 'Todavía no hay cursos.'}
@@ -265,10 +291,11 @@ function Cursos({ usuario, onVolver }: Props) {
         ) : (
           <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibles.map((c) => (
+              {visibles.map((c, indice) => (
                 <TarjetaCurso
                   key={c.id}
                   curso={c}
+                  indice={indice}
                   onAbrir={() => setSeleccionado(c)}
                   puedeEliminar={puedeEliminar(c)}
                   onEliminar={() => eliminar(c)}
@@ -293,46 +320,22 @@ function Cursos({ usuario, onVolver }: Props) {
 
       {modalAbierto && <ModalCrearCurso onCerrar={() => setModalAbierto(false)} onCreado={alCrear} />}
       {buscarCodigoAbierto && <ModalBuscarPorCodigo onCerrar={() => setBuscarCodigoAbierto(false)} onInscrito={alInscribirse} />}
-      {seleccionado && (
-        <ModalDetalleCurso
-          curso={seleccionado}
-          onCerrar={() => setSeleccionado(null)}
-          puedeEliminar={puedeEliminar(seleccionado)}
-          onEliminar={() => eliminar(seleccionado)}
-        />
-      )}
     </TemaProvider>
   )
 }
 
-function fechaLegible(iso: string) {
-  return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function EtiquetaCodigo({ codigo }: { codigo: string }) {
-  return (
-    <span className="shrink-0 rounded-md px-2 py-0.5 text-xs font-mono" style={{ background: 'var(--bg1)', color: 'var(--ink-soft)' }}>
-      {codigo}
-    </span>
-  )
-}
-
-function EtiquetaInscrito() {
-  return (
-    <span className="w-fit flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: 'rgba(22,163,74,.12)', color: '#15803d' }}>
-      <Check size={12} /> Inscrito
-    </span>
-  )
-}
-
-function TarjetaCurso({ curso, onAbrir, puedeEliminar, onEliminar }: {
+function TarjetaCurso({ curso, indice, onAbrir, puedeEliminar, onEliminar }: {
   curso: Curso
+  indice: number
   onAbrir: () => void
   puedeEliminar: boolean
   onEliminar: () => void
 }) {
   return (
-    <div className="panel rounded-2xl p-5 flex flex-col justify-start gap-2 text-left hover:-translate-y-0.5 transition relative group">
+    <div
+      className="panel rounded-2xl p-5 flex flex-col justify-start gap-2 text-left hover:-translate-y-0.5 transition relative group anim-fade-in"
+      style={{ animationDelay: `${Math.min(indice, 8) * 0.05}s` }}
+    >
       {puedeEliminar && (
         <button
           onClick={(e) => { e.stopPropagation(); onEliminar() }}
@@ -355,92 +358,6 @@ function TarjetaCurso({ curso, onAbrir, puedeEliminar, onEliminar }: {
         <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
           Creado por {curso.creadoPorNombre} · {fechaLegible(curso.fechaCreacion)}
         </p>
-      </button>
-    </div>
-  )
-}
-
-function ModalDetalleCurso({ curso, onCerrar, puedeEliminar, onEliminar }: {
-  curso: Curso
-  onCerrar: () => void
-  puedeEliminar: boolean
-  onEliminar: () => void
-}) {
-  useEffect(() => {
-    const alTeclear = (e: KeyboardEvent) => e.key === 'Escape' && onCerrar()
-    window.addEventListener('keydown', alTeclear)
-    return () => window.removeEventListener('keydown', alTeclear)
-  }, [onCerrar])
-
-  return (
-    <div className="fixed inset-0 z-30 grid place-items-center p-4" style={{ background: 'rgba(0,0,0,.5)' }} onClick={onCerrar}>
-      <div
-        role="dialog"
-        aria-label={curso.nombre}
-        onClick={(e) => e.stopPropagation()}
-        className="panel rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto"
-      >
-        <div className="flex items-start gap-3">
-          <div className="grid place-items-center w-10 h-10 rounded-xl shrink-0" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)' }}>
-            <GraduationCap size={20} style={{ color: 'var(--accent)' }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-lg break-words">{curso.nombre}</h2>
-            {curso.codigo && <EtiquetaCodigo codigo={curso.codigo} />}
-          </div>
-          <button onClick={onCerrar} className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5" title="Cerrar">
-            <X size={16} />
-          </button>
-        </div>
-        <p className="text-sm whitespace-pre-line break-words" style={{ color: curso.descripcion ? 'var(--ink)' : 'var(--ink-soft)' }}>
-          {curso.descripcion ?? 'Este curso no tiene descripción.'}
-        </p>
-        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-          Creado por {curso.creadoPorNombre} el {fechaLegible(curso.fechaCreacion)}
-        </p>
-        {curso.codigoAcceso && <CodigoAcceso codigo={curso.codigoAcceso} />}
-        {/* US17: los ejercicios los ven el profesor del curso, los
-            administradores y los estudiantes inscritos (US13). */}
-        {(puedeEliminar || curso.inscrito) && <SeccionEjercicios cursoId={curso.id} puedeGestionar={puedeEliminar} />}
-        {puedeEliminar && (
-          <button
-            onClick={onEliminar}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition hover:bg-black/5"
-            style={{ color: '#dc2626', border: '1px solid rgba(220,38,38,.4)' }}
-          >
-            <Trash2 size={13} />
-            Eliminar curso
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// US12: el código que el profesor comparte con sus estudiantes. Solo llega
-// del backend para quien creó el curso o un administrador.
-function CodigoAcceso({ codigo }: { codigo: string }) {
-  const [copiado, setCopiado] = useState(false)
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(codigo)
-      setCopiado(true)
-      setTimeout(() => setCopiado(false), 1500)
-    } catch {
-      // Sin permiso de portapapeles: el código igual queda a la vista.
-    }
-  }
-
-  return (
-    <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'var(--bg1)', border: '1px dashed var(--border)' }}>
-      <KeyRound size={18} style={{ color: 'var(--accent)' }} />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Código de acceso · compártelo con tus estudiantes</p>
-        <p className="font-mono text-lg font-semibold tracking-[0.2em]" data-testid="codigo-acceso">{codigo}</p>
-      </div>
-      <button onClick={copiar} className="grid place-items-center w-8 h-8 rounded-lg hover:bg-black/5 transition" title="Copiar código">
-        {copiado ? <Check size={16} style={{ color: '#16a34a' }} /> : <Copy size={16} />}
       </button>
     </div>
   )
@@ -492,7 +409,7 @@ function ModalBuscarPorCodigo({ onCerrar, onInscrito }: { onCerrar: () => void; 
         role="dialog"
         aria-label="Unirme con código"
         onClick={(e) => e.stopPropagation()}
-        className="panel rounded-2xl p-6 w-full max-w-md space-y-4"
+        className="panel rounded-2xl anim-slide-up p-6 w-full max-w-md space-y-4"
       >
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Unirme a un curso</p>
@@ -555,153 +472,6 @@ function ModalBuscarPorCodigo({ onCerrar, onInscrito }: { onCerrar: () => void; 
   )
 }
 
-// ============================================================
-//  Ejercicios del curso (US17 eliminar, #21). Crear aquí es la base
-//  mínima para tener qué eliminar; US14/US15 la amplían.
-// ============================================================
-function SeccionEjercicios({ cursoId, puedeGestionar }: { cursoId: string; puedeGestionar: boolean }) {
-  const [ejercicios, setEjercicios] = useState<Ejercicio[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  // Id del ejercicio que espera confirmación para eliminarse.
-  const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
-  const [eliminando, setEliminando] = useState(false)
-  const [titulo, setTitulo] = useState('')
-  const [enunciado, setEnunciado] = useState('')
-  const [guardando, setGuardando] = useState(false)
-
-  useEffect(() => {
-    let cancelado = false
-    listarEjercicios(cursoId)
-      .then((lista) => !cancelado && setEjercicios(lista))
-      .catch((e) => !cancelado && setError(e instanceof Error ? e.message : 'No se pudieron cargar los ejercicios.'))
-    return () => { cancelado = true }
-  }, [cursoId])
-
-  async function confirmarEliminar(ejercicio: Ejercicio) {
-    setError(null)
-    setEliminando(true)
-    try {
-      await eliminarEjercicio(ejercicio.id)
-      setEjercicios((actuales) => (actuales ?? []).filter((e) => e.id !== ejercicio.id))
-      setAviso(`Ejercicio «${ejercicio.titulo}» eliminado.`)
-      setPorConfirmar(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo eliminar el ejercicio.')
-    } finally {
-      setEliminando(false)
-    }
-  }
-
-  async function agregar() {
-    if (titulo.trim().length < 3) {
-      setError('El título del ejercicio debe tener al menos 3 caracteres.')
-      return
-    }
-    setError(null)
-    setGuardando(true)
-    try {
-      const nuevo = await crearEjercicio(cursoId, { titulo: titulo.trim(), enunciado: enunciado.trim() || undefined })
-      setEjercicios((actuales) => [...(actuales ?? []), nuevo])
-      setTitulo('')
-      setEnunciado('')
-      setAviso(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo crear el ejercicio.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  return (
-    <section className="space-y-2 pt-2" style={{ borderTop: '1px solid var(--border)' }} aria-label="Ejercicios">
-      <h3 className="text-sm font-semibold flex items-center gap-1.5 pt-2">
-        <ClipboardList size={15} style={{ color: 'var(--accent)' }} /> Ejercicios
-      </h3>
-
-      {aviso && <p role="status" className="text-xs" style={{ color: '#15803d' }}>{aviso}</p>}
-      {error && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}
-
-      {ejercicios === null ? (
-        !error && <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}><Loader2 size={12} className="animate-spin" /> Cargando…</p>
-      ) : ejercicios.length === 0 ? (
-        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Este curso todavía no tiene ejercicios.</p>
-      ) : (
-        <ul className="space-y-2">
-          {ejercicios.map((e) => (
-            <li key={e.id} className="rounded-xl p-3" style={{ background: 'var(--bg1)', border: '1px solid var(--border)' }}>
-              <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium break-words">{e.titulo}</p>
-                  {e.enunciado && <p className="text-xs whitespace-pre-line break-words mt-0.5" style={{ color: 'var(--ink-soft)' }}>{e.enunciado}</p>}
-                </div>
-                {puedeGestionar && porConfirmar !== e.id && (
-                  <button
-                    onClick={() => { setPorConfirmar(e.id); setAviso(null) }}
-                    className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5 transition shrink-0"
-                    style={{ color: '#dc2626' }}
-                    title="Eliminar ejercicio"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-              {/* US17: el sistema solicita confirmación antes de eliminar. */}
-              {porConfirmar === e.id && (
-                <div role="alertdialog" aria-label={`Confirmar eliminación de ${e.titulo}`} className="mt-2 rounded-lg p-2 flex flex-wrap items-center gap-2" style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.3)' }}>
-                  <span className="text-xs flex-1 min-w-40">¿Eliminar este ejercicio? Los estudiantes dejarán de verlo. No se puede deshacer.</span>
-                  <button onClick={() => setPorConfirmar(null)} disabled={eliminando} className="px-2.5 py-1 rounded-lg text-xs hover:bg-black/5 transition">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => confirmarEliminar(e)}
-                    disabled={eliminando}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-white transition disabled:opacity-50"
-                    style={{ background: '#dc2626' }}
-                  >
-                    {eliminando && <Loader2 size={12} className="animate-spin" />}
-                    Sí, eliminar
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {puedeGestionar && (
-        <form onSubmit={(ev) => { ev.preventDefault(); agregar() }} className="space-y-2 pt-1" aria-label="Agregar ejercicio">
-          <input
-            value={titulo}
-            onChange={(ev) => setTitulo(ev.target.value)}
-            maxLength={150}
-            placeholder="Título del nuevo ejercicio"
-            className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-            style={estiloCampo}
-          />
-          <textarea
-            value={enunciado}
-            onChange={(ev) => setEnunciado(ev.target.value)}
-            maxLength={5000}
-            rows={2}
-            placeholder="Enunciado (opcional)"
-            className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-y"
-            style={estiloCampo}
-          />
-          <button
-            type="submit"
-            disabled={guardando || titulo.trim().length < 3}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg accent-bg text-white text-xs font-medium shadow hover:brightness-110 disabled:opacity-40 transition"
-          >
-            {guardando ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-            Agregar ejercicio
-          </button>
-        </form>
-      )}
-    </section>
-  )
-}
-
 function ModalCrearCurso({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: (c: Curso) => void }) {
   const [nombre, setNombre] = useState('')
   const [codigo, setCodigo] = useState('')
@@ -737,7 +507,7 @@ function ModalCrearCurso({ onCerrar, onCreado }: { onCerrar: () => void; onCread
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); enviar() }}
-        className="panel rounded-2xl p-6 w-full max-w-md space-y-3"
+        className="panel rounded-2xl anim-slide-up p-6 w-full max-w-md space-y-3"
         aria-label="Crear curso"
       >
         <div className="flex items-center justify-between">

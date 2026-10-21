@@ -33,7 +33,7 @@ function Retos({ onVolver, onEmpezarDiario }: Props) {
       </header>
 
       <main className="flex-1 grid place-items-center p-6">
-        <div className="panel rounded-2xl p-8 max-w-md w-full text-center space-y-4">
+        <div className="panel rounded-2xl p-8 max-w-md w-full text-center space-y-4 anim-fade-in-slow">
           <div className="mx-auto grid place-items-center w-14 h-14 rounded-2xl" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)' }}>
             <Trophy size={26} style={{ color: 'var(--accent)' }} />
           </div>

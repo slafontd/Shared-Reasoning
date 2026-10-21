@@ -177,9 +177,10 @@ function PestanaMateriales({ usuario }: { usuario: Usuario | null }) {
         </p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {visibles.map((m) => (
+          {visibles.map((m, indice) => (
             <MaterialCard
               key={m.id}
+              indice={indice}
               material={m}
               puedeBorrar={!!usuario && usuario.usuarioId === m.subidoPor}
               onDescargar={() => descargarMaterial(m).catch((e) => setError(e instanceof Error ? e.message : 'Error al descargar.'))}
@@ -199,14 +200,15 @@ function PestanaMateriales({ usuario }: { usuario: Usuario | null }) {
   )
 }
 
-function MaterialCard({ material, puedeBorrar, onDescargar, onBorrar }: {
+function MaterialCard({ material, indice, puedeBorrar, onDescargar, onBorrar }: {
   material: Material
+  indice: number
   puedeBorrar: boolean
   onDescargar: () => void
   onBorrar: () => void
 }) {
   return (
-    <div className="panel rounded-2xl overflow-hidden flex flex-col group">
+    <div className="panel rounded-2xl overflow-hidden flex flex-col group anim-fade-in" style={{ animationDelay: `${Math.min(indice, 10) * 0.05}s` }}>
       <div className="aspect-[3/4] grid place-items-center overflow-hidden" style={{ background: 'var(--bg2)' }}>
         {material.portadaUrl ? (
           <img src={material.portadaUrl} alt={material.titulo} className="w-full h-full object-cover" />
@@ -267,7 +269,7 @@ function ModalSubirMaterial({ onCerrar, onSubido }: { onCerrar: () => void; onSu
 
   return (
     <div className="fixed inset-0 z-30 grid place-items-center p-4" style={{ background: 'rgba(0,0,0,.5)' }}>
-      <div className="panel rounded-2xl p-6 w-full max-w-sm space-y-3">
+      <div className="panel rounded-2xl anim-slide-up p-6 w-full max-w-sm space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Subir material</p>
           <button onClick={onCerrar} className="grid place-items-center w-7 h-7 rounded-lg hover:bg-black/5"><X size={16} /></button>

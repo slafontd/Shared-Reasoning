@@ -41,17 +41,131 @@ function opacidadDe(estado?: EstadoItem): number {
   return estado === 'previo' ? OPACIDAD_PREVIO : 1
 }
 
+// Quien prefiere menos movimiento ve el estado final sin transiciones
+// (mismo criterio que el bloque prefers-reduced-motion de index.css).
+function prefiereMenosMovimiento(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+// Las animaciones mueven propiedades de los nodos con requestAnimationFrame
+// en vez de Konva.Tween/Animation: importar 'konva' aquí en tiempo de
+// ejecución cargaba una segunda instancia junto a la de react-konva.
+function animar(duracionMs: number, cuadro: (t: number) => void): () => void {
+  const inicio = performance.now()
+  let id = 0
+  const paso = (ahora: number) => {
+    const t = Math.min(1, (ahora - inicio) / duracionMs)
+    cuadro(t)
+    if (t < 1) id = requestAnimationFrame(paso)
+  }
+  id = requestAnimationFrame(paso)
+  return () => cancelAnimationFrame(id)
+}
+
+// Pulso continuo (0→1→0) para el brillo del paso activo: el aro de Elektra
+// «respira» en vez de quedarse fijo. `aplicar` recibe k (0..1) y los segundos.
+function usePulso(nodo: React.RefObject<Konva.Node | null>, aplicar: (nodo: Konva.Node, k: number, segundos: number) => void) {
+  useEffect(() => {
+    const n = nodo.current
+    if (!n) return
+    if (prefiereMenosMovimiento()) {
+      aplicar(n, 1, 0)
+      n.getLayer()?.batchDraw()
+      return
+    }
+    let id = 0
+    const inicio = performance.now()
+    const cuadro = (ahora: number) => {
+      const seg = (ahora - inicio) / 1000
+      aplicar(n, (Math.sin((seg * 2 * Math.PI) / 1.6) + 1) / 2, seg)
+      n.getLayer()?.batchDraw()
+      id = requestAnimationFrame(cuadro)
+    }
+    id = requestAnimationFrame(cuadro)
+    return () => cancelAnimationFrame(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
+
 // Anillo sobre un hueco: señala dónde va el componente del paso activo.
-// El color viene del tema (día/noche) — ver `acento` en Protoboard, resuelto
-// desde la variable CSS --accent porque Konva/canvas no entiende var(...).
+// Como el aro del paso activo de Elektra: discontinuo, con resplandor que
+// pulsa y trazo que avanza despacio. El color viene del tema (día/noche) —
+// ver `acento` en Protoboard, resuelto desde la variable CSS --accent porque
+// Konva/canvas no entiende var(...).
 function MarcadorActivo({ x, y, color }: { x: number; y: number; color: string }) {
+  const ref = useRef<Konva.Circle>(null)
+  usePulso(ref, (nodo, k, t) => {
+    const c = nodo as Konva.Circle
+    c.shadowBlur(10 + 12 * k)
+    c.radius(9 + 1.2 * k)
+    c.dashOffset(-t * 5)
+  })
   return (
     <Circle
+      ref={ref}
       x={x} y={y} radius={9}
-      stroke={color} strokeWidth={2.5}
-      shadowColor={color} shadowBlur={10} shadowOpacity={0.9}
+      stroke={color} strokeWidth={2.5} dash={[5, 3.5]}
+      shadowColor={color} shadowBlur={18} shadowOpacity={0.9}
       listening={false} perfectDrawEnabled={false}
     />
+  )
+}
+
+// Estela luminosa que recorre la pieza (o el cable) del paso activo, debajo
+// de su dibujo: resalta la silueta completa, no solo los huecos.
+function AuraActiva({ puntos, color, grosor }: { puntos: number[]; color: string; grosor: number }) {
+  const ref = useRef<Konva.Line>(null)
+  usePulso(ref, (nodo, k) => {
+    nodo.opacity(0.14 + 0.2 * k)
+    ;(nodo as Konva.Line).shadowBlur(10 + 12 * k)
+  })
+  return (
+    <Line
+      ref={ref}
+      points={puntos}
+      stroke={color} strokeWidth={grosor} lineCap="round" opacity={0.25}
+      shadowColor={color} shadowBlur={18} shadowOpacity={1}
+      listening={false} perfectDrawEnabled={false}
+    />
+  )
+}
+
+// Entrada y cambio de estado animados: cada pieza aparece con un fundido que
+// la «asienta» en su sitio (cae unos píxeles), y al pasar a «previo» se
+// atenúa con suavidad en vez de saltar. Los valores de opacity/y del Group
+// son fijos a propósito: así react-konva no los pisa y la animación manda.
+type EventoRaton = (e: Konva.KonvaEventObject<MouseEvent>) => void
+function PiezaAnimada({ estado, children, ...resto }: {
+  estado?: EstadoItem
+  children: ReactNode
+  onMouseEnter?: EventoRaton
+  onMouseMove?: EventoRaton
+  onMouseLeave?: EventoRaton
+}) {
+  const ref = useRef<Konva.Group>(null)
+  useEffect(() => {
+    const g = ref.current
+    if (!g) return
+    const destino = opacidadDe(estado)
+    if (prefiereMenosMovimiento()) {
+      g.opacity(destino)
+      g.y(0)
+      g.getLayer()?.batchDraw()
+      return
+    }
+    const desdeOpacidad = g.opacity()
+    const desdeY = g.y()
+    return animar(350, (t) => {
+      const e = 1 - (1 - t) ** 3 // ease-out cúbico
+      g.opacity(desdeOpacidad + (destino - desdeOpacidad) * e)
+      g.y(desdeY * (1 - e))
+      g.getLayer()?.batchDraw()
+    })
+  }, [estado])
+  return (
+    <Group ref={ref} opacity={0} y={-10} {...resto}>
+      {children}
+    </Group>
   )
 }
 
@@ -391,22 +505,25 @@ function Protoboard({ componentes = [], cables = [], nodos = [], baterias = [], 
       <Layer>
         {/* Baterías físicas al borde (energizan los rieles) */}
         {baterias.map((bat, i) => (
-          <Group key={`bat-${bat.id}`} opacity={opacidadDe(bat.estado)}>
+          <PiezaAnimada key={`bat-${bat.id}`} estado={bat.estado}>
             <BatteryEdge bateria={bat} index={i} />
-          </Group>
+          </PiezaAnimada>
         ))}
 
         {/* Cables (van debajo de los componentes) */}
         {cables.map((cable, i) => (
-          <Group key={`cable-${i}`} opacity={opacidadDe(cable.estado)}>
+          <PiezaAnimada key={`cable-${i}`} estado={cable.estado}>
+            {cable.estado === 'activo' && (
+              <AuraActiva puntos={[cable.x1, cable.y1, cable.x2, cable.y2]} color={acento} grosor={11} />
+            )}
+            <Wire x1={cable.x1} y1={cable.y1} x2={cable.x2} y2={cable.y2} color={cable.color ?? '#16a34a'} />
             {cable.estado === 'activo' && (
               <>
                 <MarcadorActivo x={cable.x1} y={cable.y1} color={acento} />
                 <MarcadorActivo x={cable.x2} y={cable.y2} color={acento} />
               </>
             )}
-            <Wire x1={cable.x1} y1={cable.y1} x2={cable.x2} y2={cable.y2} color={cable.color ?? '#16a34a'} />
-          </Group>
+          </PiezaAnimada>
         ))}
 
         {/* Nodos (V_in, V_out, GND...): terminal de color + etiqueta */}
@@ -421,13 +538,22 @@ function Protoboard({ componentes = [], cables = [], nodos = [], baterias = [], 
             (ComponenteOrientado los rota para que se vean como en la Biblioteca) */}
         {componentes.map((comp) => {
           return (
-            <Group
+            <PiezaAnimada
               key={comp.id}
-              opacity={opacidadDe(comp.estado)}
+              estado={comp.estado}
               onMouseEnter={(e) => entrarComponente(e, comp.label)}
               onMouseMove={(e) => moverEnComponente(e, comp.label)}
               onMouseLeave={salirComponente}
             >
+              {comp.estado === 'activo' && (
+                <AuraActiva
+                  puntos={comp.x3 !== undefined && comp.y3 !== undefined
+                    ? [comp.x1, comp.y1, comp.x2, comp.y2, comp.x3, comp.y3]
+                    : [comp.x1, comp.y1, comp.x2, comp.y2]}
+                  color={acento}
+                  grosor={22}
+                />
+              )}
               {comp.kind === 'ic' ? (
                 // El IC no usa el patrón de patas: se dibuja como caja con pines.
                 <IC x={Math.min(comp.x1, comp.x2)} y={Math.min(comp.y1, comp.y2) - 18} width={Math.abs(comp.x2 - comp.x1) || 60} label={comp.id} />
@@ -475,7 +601,7 @@ function Protoboard({ componentes = [], cables = [], nodos = [], baterias = [], 
                   {comp.x3 !== undefined && comp.y3 !== undefined && <MarcadorActivo x={comp.x3} y={comp.y3} color={acento} />}
                 </>
               )}
-            </Group>
+            </PiezaAnimada>
           )
         })}
       </Layer>
@@ -486,7 +612,7 @@ function Protoboard({ componentes = [], cables = [], nodos = [], baterias = [], 
         y el onMouseLeave del Group nunca se dispararía. */}
     {hover && (
       <div
-        className="absolute z-20 pointer-events-none px-2 py-1 rounded-lg text-xs font-semibold shadow-lg whitespace-nowrap"
+        className="absolute z-20 pointer-events-none px-2 py-1 rounded-lg text-xs font-semibold shadow-lg whitespace-nowrap anim-popover"
         style={{
           left: hover.x + 14,
           top: hover.y + 14,
@@ -499,13 +625,13 @@ function Protoboard({ componentes = [], cables = [], nodos = [], baterias = [], 
     )}
     {/* Controles de zoom nativo de Konva (no el zoom del navegador) */}
     <div className="absolute bottom-2 right-2 flex flex-col gap-1 z-10">
-      <button onClick={() => zoomHacia(ZOOM_STEP)} className="grid place-items-center w-7 h-7 rounded-md shadow" style={botonZoomStyle} title="Acercar">
+      <button onClick={() => zoomHacia(ZOOM_STEP)} className="grid place-items-center w-7 h-7 rounded-md shadow transition duration-150 ease-out hover:scale-110 hover:brightness-110 active:scale-95" style={botonZoomStyle} title="Acercar">
         <ZoomIn size={14} />
       </button>
-      <button onClick={() => zoomHacia(1 / ZOOM_STEP)} className="grid place-items-center w-7 h-7 rounded-md shadow" style={botonZoomStyle} title="Alejar">
+      <button onClick={() => zoomHacia(1 / ZOOM_STEP)} className="grid place-items-center w-7 h-7 rounded-md shadow transition duration-150 ease-out hover:scale-110 hover:brightness-110 active:scale-95" style={botonZoomStyle} title="Alejar">
         <ZoomOut size={14} />
       </button>
-      <button onClick={resetVista} className="grid place-items-center w-7 h-7 rounded-md shadow" style={botonZoomStyle} title="Restablecer vista">
+      <button onClick={resetVista} className="grid place-items-center w-7 h-7 rounded-md shadow transition duration-150 ease-out hover:scale-110 hover:brightness-110 active:scale-95" style={botonZoomStyle} title="Restablecer vista">
         <RotateCcw size={14} />
       </button>
     </div>

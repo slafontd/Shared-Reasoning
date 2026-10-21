@@ -103,7 +103,7 @@ function Auth({ onEntrar }: Props) {
     <TemaProvider tema="light" className="min-h-screen" style={{ background: 'var(--bg1)', color: 'var(--ink)' }}>
       <div className="min-h-screen grid place-items-center p-6">
         <div
-          className="w-full max-w-sm rounded-3xl p-8 shadow-xl"
+          className="w-full max-w-sm rounded-3xl p-8 shadow-xl anim-fade-in-slow"
           style={{ background: 'var(--bg2)' }}
         >
           <div className="flex justify-center mb-6">

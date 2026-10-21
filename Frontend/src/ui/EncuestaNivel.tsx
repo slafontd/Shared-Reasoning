@@ -38,7 +38,7 @@ function EncuestaNivel({ onElegir }: Props) {
         <div className="flex items-center gap-4">
           <BlobMascota size={72} />
           <div
-            className="rounded-3xl rounded-bl-md px-5 py-3 text-lg font-semibold shadow-lg"
+            className="rounded-3xl rounded-bl-md px-5 py-3 text-lg font-semibold shadow-lg anim-bubble-in"
             style={{ background: 'var(--bg2)', color: 'var(--ink)' }}
           >
             ¡Elige tu nivel!
@@ -46,12 +46,12 @@ function EncuestaNivel({ onElegir }: Props) {
         </div>
 
         <div className={`grid grid-cols-1 ${NIVELES.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 w-full max-w-5xl`}>
-          {NIVELES.map((n) => (
+          {NIVELES.map((n, indice) => (
             <button
               key={n.id}
               onClick={() => onElegir(n.id)}
-              className="group relative rounded-3xl p-8 text-left shadow-lg overflow-hidden transition hover:-translate-y-1 hover:shadow-2xl min-h-[220px] flex flex-col"
-              style={{ background: 'var(--bg2)', border: '1px solid var(--border)' }}
+              className="group relative rounded-3xl p-8 text-left shadow-lg overflow-hidden transition hover:-translate-y-1 hover:shadow-2xl min-h-[220px] flex flex-col anim-fade-in"
+              style={{ background: 'var(--bg2)', border: '1px solid var(--border)', animationDelay: `${indice * 0.1}s` }}
             >
               <h3 className="text-2xl font-extrabold mb-2" style={{ color: 'var(--accent)' }}>
                 {n.titulo}

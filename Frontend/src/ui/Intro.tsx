@@ -14,7 +14,7 @@ function Intro({ onContinuar }: Props) {
           <div className="flex items-center gap-6">
             <BlobMascota size={140} />
             <div
-              className="relative rounded-3xl rounded-bl-md px-6 py-5 text-lg font-semibold shadow-lg"
+              className="relative rounded-3xl rounded-bl-md px-6 py-5 text-lg font-semibold shadow-lg anim-bubble-in"
               style={{ background: 'var(--bg2)', color: 'var(--ink)' }}
             >
               ¡Hola, me llamo Blob!

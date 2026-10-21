@@ -315,14 +315,14 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
 
           {fase === 'cargando' ? (
             /* ---- Estado de carga del pipeline ---- */
-            <div className="panel rounded-2xl p-10 flex flex-col items-center gap-4">
+            <div className="panel rounded-2xl p-10 flex flex-col items-center gap-4 anim-fade-in">
               <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
               <p className="text-sm font-medium">{mensajeCarga}</p>
               <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Esto puede tardar unos segundos.</p>
             </div>
           ) : fase === 'intencion' ? (
             /* ---- Cuestionario ligero: ¿qué necesitas del esquemático? ---- */
-            <div className="panel rounded-2xl p-6">
+            <div className="panel rounded-2xl p-6 anim-fade-in">
               <p className="text-sm font-semibold mb-1">¿Qué necesitas de este esquemático?</p>
               <p className="text-xs mb-4" style={{ color: 'var(--ink-soft)' }}>Subiste la imagen sin indicaciones — arma el circuito en la protoboard paso a paso.</p>
               <div className="space-y-2">
@@ -346,7 +346,7 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
             </div>
           ) : (
             /* ---- Formulario principal ---- */
-            <div className="panel rounded-2xl p-6 space-y-4">
+            <div className="panel rounded-2xl p-6 space-y-4 anim-fade-in">
               {/* Origen del esquemático: subida propia o biblioteca de ejemplo */}
               <div className="flex gap-1 rounded-lg p-1 w-fit" style={{ background: 'var(--bg2)' }}>
                 <button

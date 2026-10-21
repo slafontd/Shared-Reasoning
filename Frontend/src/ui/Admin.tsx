@@ -146,7 +146,7 @@ function Admin({ usuarioActualId, onVolver }: Props) {
             {busqueda.trim() ? `Ningún usuario coincide con «${busqueda.trim()}».` : 'No hay usuarios registrados.'}
           </p>
         ) : (
-          <div className="panel rounded-2xl overflow-hidden">
+          <div className="panel rounded-2xl overflow-hidden anim-fade-in">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -279,7 +279,7 @@ function ModalUsuario({ usuario, esUnoMismo, onCerrar, onGuardado }: {
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); enviar() }}
-        className="panel rounded-2xl p-6 w-full max-w-sm space-y-3"
+        className="panel rounded-2xl anim-slide-up p-6 w-full max-w-sm space-y-3"
         aria-label={editando ? 'Editar usuario' : 'Nuevo usuario'}
       >
         <div className="flex items-center justify-between">

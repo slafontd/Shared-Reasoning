@@ -105,7 +105,7 @@ function ChatPanel({ mensajes, onMensajes, sesionId, netlist, instrucciones, pro
             // se renderiza como markdown. `items-start` en vez de `items-end`:
             // con varios párrafos, anclar la mascota abajo la despega del inicio
             // del mensaje.
-            <div key={i} className="flex items-start gap-2">
+            <div key={i} className="flex items-start gap-2 anim-bubble-in">
               <BlobMascota size={28} className="shrink-0" />
               <div
                 className="text-[15px]/[1.6] rounded-2xl rounded-bl-sm px-3.5 py-2.5 max-w-[90%] shadow-sm break-words"
@@ -118,7 +118,7 @@ function ChatPanel({ mensajes, onMensajes, sesionId, netlist, instrucciones, pro
             // El mensaje del usuario se deja en texto plano a propósito: es
             // corto, y renderizarle markdown haría que un asterisco o guion
             // suyo cambiara de forma al enviarlo.
-            <div key={i} className="flex gap-2 flex-row-reverse">
+            <div key={i} className="flex gap-2 flex-row-reverse anim-bubble-in">
               <div
                 className="text-[15px]/[1.5] font-medium rounded-2xl rounded-tr-sm px-3.5 py-2.5 max-w-[80%] shadow-sm whitespace-pre-wrap break-words"
                 style={{ background: 'var(--accent)', color: 'var(--bg2)' }}
@@ -129,10 +129,13 @@ function ChatPanel({ mensajes, onMensajes, sesionId, netlist, instrucciones, pro
           ),
         )}
         {cargando && (
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-2 anim-bubble-in" role="status" aria-label="El asistente está pensando">
             <BlobMascota size={28} className="shrink-0" />
-            <div className="text-[15px]/[1.6] rounded-2xl rounded-bl-sm px-3.5 py-2.5 shadow-sm" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--ink-soft)' }}>
-              Pensando…
+            {/* Tres puntos que rebotan, como el indicador de "escribiendo" de Elektra. */}
+            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm px-4 py-3.5 shadow-sm" style={{ background: 'var(--bg2)', border: '1px solid var(--border)' }}>
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
             </div>
           </div>
         )}
