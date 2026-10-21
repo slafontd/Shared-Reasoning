@@ -254,6 +254,9 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `GET` | `/materiales/portadas/{id}` · `/materiales/descargar/{id}` | Portada (pública) · archivo (requiere JWT). |
 | `GET` `POST` | `/materiales/tutorial/{componente}` · `/materiales/tutorial-chat` | Tutorial de IA por componente · chat de seguimiento. |
 | `POST` `GET` | `/cursos` · `/cursos/{id}` | Crear un curso · listar/buscar cursos (`busqueda`, `limite`, `desplazamiento`) · detalle. |
+| `GET` | `/cursos/codigo/{codigo}` | Buscar un curso por su código de acceso (US12). |
+| `POST` `GET` | `/cursos/inscripciones` · `/cursos/mis-cursos` | Inscribirse con el código · cursos en los que estoy inscrito (US13). |
+| `GET` `POST` `DELETE` | `/cursos/{id}/ejercicios` · `/ejercicios/{id}` | Ejercicios de un curso: listar, crear y eliminar (US17). |
 | `GET` | `/retos/diario` | Reto diario gamificado, generado por IA según el nivel del usuario. |
 
 Todos los endpoints (excepto registro/login y los públicos de arriba) requieren un token JWT en el header `Authorization: Bearer <token>`.

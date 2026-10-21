@@ -63,13 +63,39 @@ def registrar(cliente, email="ana.perez@eafit.edu.co", nombre="Ana Pérez", cont
     return cliente.post("/auth/registro", json={"nombre": nombre, "email": email, "contrasena": contrasena})
 
 
-@pytest.fixture
-def token(cliente):
-    respuesta = registrar(cliente)
-    assert respuesta.status_code == 201, respuesta.text
-    return respuesta.json()["access_token"]
+def registrar_y_verificar(cliente, email="ana.perez@eafit.edu.co", nombre="Ana Pérez", contrasena=CONTRASENA_VALIDA):
+    """Registro + verificación de correo: deja la cuenta lista para iniciar sesión."""
+    registro = registrar(cliente, email=email, nombre=nombre, contrasena=contrasena)
+    assert registro.status_code == 201, registro.text
+    codigo = registro.json()["codigo_verificacion"]
+    verificacion = cliente.post("/auth/verificar-email", json={"email": email, "codigo": codigo})
+    assert verificacion.status_code == 200, verificacion.text
+    return registro
+
+
+def crear_usuario(cliente, email="ana.perez@eafit.edu.co", nombre="Ana Pérez", rol=None, contrasena=CONTRASENA_VALIDA):
+    """Registra, verifica el correo e inicia sesión — el camino completo que
+    exige la verificación de correo — y devuelve las cabeceras con el JWT.
+    `rol` se fija directo en la BD (solo un administrador puede asignar
+    "profesor" desde la app, ver admin.py)."""
+    registrar_y_verificar(cliente, email=email, nombre=nombre, contrasena=contrasena)
+    if rol is not None:
+        from db.database import SessionLocal
+        from db.models import Usuario
+        with SessionLocal() as db:
+            db.query(Usuario).filter(Usuario.email == email.strip().lower()).update({"rol": rol})
+            db.commit()
+    login = cliente.post("/auth/login", json={"email": email, "contrasena": contrasena})
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest.fixture
-def cabeceras(token):
-    return {"Authorization": f"Bearer {token}"}
+def cabeceras(cliente):
+    """Profesor verificado: el rol mínimo que puede crear cursos (US06)."""
+    return crear_usuario(cliente, rol="profesor")
+
+
+@pytest.fixture
+def token(cabeceras):
+    return cabeceras["Authorization"].removeprefix("Bearer ")

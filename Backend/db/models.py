@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -151,5 +151,61 @@ class Curso(Base):
         index=True,
     )
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Código para encontrar el curso e inscribirse (US12/US13), estilo
+    # Google Classroom: lo genera el sistema al crear el curso y el profesor
+    # lo comparte. Es distinto de `codigo` (el de la materia, opcional y que
+    # se repite entre grupos) — este es único por curso. Ver codigos_curso.py.
+    codigo_acceso = Column(String(12), nullable=False, unique=True)
 
     creador = relationship("Usuario", lazy="joined")
+
+
+class Inscripcion(Base):
+    """Estudiante inscrito en un curso (US13, #16) — se inscribe con el
+    código de acceso del curso (US12). Si se borra el curso o el usuario,
+    la inscripción desaparece con él."""
+    __tablename__ = "inscripciones"
+    __table_args__ = (UniqueConstraint("usuario_id", "curso_id", name="uq_inscripciones_usuario_curso"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    curso_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cursos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_inscripcion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    curso = relationship("Curso", lazy="joined")
+
+
+class Ejercicio(Base):
+    """Ejercicio de un curso. Base mínima creada para US17 (eliminar
+    ejercicio, #21): título y enunciado. Crear y consultar ejercicios con
+    todo su detalle corresponde a US14/US15 — que extiendan este modelo en
+    vez de crear otro. Si se borra el curso, sus ejercicios se van con él."""
+    __tablename__ = "ejercicios"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    curso_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cursos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    titulo = Column(String(150), nullable=False)
+    enunciado = Column(Text, nullable=True)
+    creado_por = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    curso = relationship("Curso", lazy="joined")

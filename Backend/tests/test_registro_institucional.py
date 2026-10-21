@@ -2,14 +2,16 @@
 
 import pytest
 
-from conftest import CONTRASENA_VALIDA, registrar
+from conftest import CONTRASENA_VALIDA, registrar, registrar_y_verificar
 
 
 def test_registro_con_correo_institucional_crea_la_cuenta(cliente):
     respuesta = registrar(cliente, email="ana.perez@eafit.edu.co")
     assert respuesta.status_code == 201
     assert respuesta.json()["email"] == "ana.perez@eafit.edu.co"
-    assert respuesta.json()["access_token"]
+    # Con la verificación de correo, el registro ya no entrega token: entrega
+    # el código para verificar la cuenta.
+    assert respuesta.json()["codigo_verificacion"]
 
 
 def test_no_se_aceptan_subdominios_institucionales(cliente):
@@ -45,7 +47,7 @@ def test_contrasena_debil_se_rechaza_con_mensaje_claro(cliente):
 
 
 def test_el_usuario_registrado_puede_iniciar_sesion(cliente):
-    registrar(cliente, email="ana@eafit.edu.co")
+    registrar_y_verificar(cliente, email="ana@eafit.edu.co")
     respuesta = cliente.post("/auth/login", json={"email": "ana@eafit.edu.co", "contrasena": CONTRASENA_VALIDA})
     assert respuesta.status_code == 200
 

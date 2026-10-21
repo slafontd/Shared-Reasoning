@@ -1,10 +1,10 @@
 """US03 — Inicio de sesión (issue #4)."""
 
-from conftest import CONTRASENA_VALIDA, registrar
+from conftest import CONTRASENA_VALIDA, registrar, registrar_y_verificar
 
 
 def test_login_correcto_devuelve_token_y_datos_del_usuario(cliente):
-    registrar(cliente)
+    registrar_y_verificar(cliente)
     respuesta = cliente.post("/auth/login", json={"email": "ana.perez@eafit.edu.co", "contrasena": CONTRASENA_VALIDA})
 
     assert respuesta.status_code == 200
@@ -16,7 +16,7 @@ def test_login_correcto_devuelve_token_y_datos_del_usuario(cliente):
 
 
 def test_el_token_del_login_da_acceso_a_rutas_protegidas(cliente):
-    registrar(cliente)
+    registrar_y_verificar(cliente)
     token = cliente.post(
         "/auth/login", json={"email": "ana.perez@eafit.edu.co", "contrasena": CONTRASENA_VALIDA}
     ).json()["access_token"]
@@ -27,7 +27,7 @@ def test_el_token_del_login_da_acceso_a_rutas_protegidas(cliente):
 
 
 def test_login_no_distingue_mayusculas_en_el_correo(cliente):
-    registrar(cliente, email="Ana.Perez@EAFIT.edu.co")
+    registrar_y_verificar(cliente, email="Ana.Perez@EAFIT.edu.co")
     respuesta = cliente.post("/auth/login", json={"email": "  ana.perez@eafit.edu.co ", "contrasena": CONTRASENA_VALIDA})
     assert respuesta.status_code == 200
 
@@ -50,7 +50,7 @@ def test_login_rechaza_correo_no_institucional(cliente):
     respuesta = cliente.post("/auth/login", json={"email": "nadie@gmail.com", "contrasena": CONTRASENA_VALIDA})
 
     assert respuesta.status_code == 422
-    assert "correo institucional" in respuesta.json()["detail"][0]["msg"]
+    assert "correo institucional" in respuesta.json()["detail"]
 
 
 def test_campos_vacios_dan_422(cliente):

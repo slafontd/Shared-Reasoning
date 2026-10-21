@@ -2,7 +2,7 @@
 
 import uuid
 
-from conftest import registrar
+from conftest import crear_usuario
 
 
 def crear(cliente, cabeceras, nombre, codigo=None):
@@ -27,8 +27,8 @@ def test_lista_todos_los_cursos_del_mas_reciente_al_mas_antiguo(cliente, cabecer
 
 def test_se_ven_los_cursos_creados_por_otros_usuarios(cliente, cabeceras):
     crear(cliente, cabeceras, "Curso de Ana")
-    otro = registrar(cliente, email="beto@eafit.edu.co", nombre="Beto").json()["access_token"]
-    cursos = cliente.get("/cursos", headers={"Authorization": f"Bearer {otro}"}).json()
+    otro = crear_usuario(cliente, email="beto@eafit.edu.co", nombre="Beto")
+    cursos = cliente.get("/cursos", headers=otro).json()
     assert [(c["nombre"], c["creado_por_nombre"]) for c in cursos] == [("Curso de Ana", "Ana Pérez")]
 
 

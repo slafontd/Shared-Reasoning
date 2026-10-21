@@ -17,6 +17,7 @@ from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
 import cursos
+import ejercicios
 import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
 from schemas.retos import RetoDiario
@@ -90,6 +91,7 @@ TIPOS_IMAGEN_VALIDOS = ["image/jpeg", "image/png", "image/webp", "image/tiff", "
 metricas = Metricas()
 
 app.include_router(cursos.router)
+app.include_router(ejercicios.router)
 app.include_router(admin.router)
 
 
