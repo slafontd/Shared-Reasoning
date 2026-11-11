@@ -47,6 +47,9 @@ export type Solucion = {
   estudianteNombre: string
   texto: string | null
   fechaEntrega: string
+  feedback: string | null
+  feedbackProfesorId: string | null
+  feedbackActualizadoEn: string | null
   archivos: ArchivoSolucion[]
 }
 
@@ -57,6 +60,9 @@ type SolucionAPI = {
   estudiante_nombre: string
   texto: string | null
   fecha_entrega: string
+  feedback?: string | null
+  feedback_profesor_id?: string | null
+  feedback_actualizado_en?: string | null
   archivos: ArchivoSolucion[]
 }
 
@@ -68,6 +74,9 @@ function aSolucion(s: SolucionAPI): Solucion {
     estudianteNombre: s.estudiante_nombre,
     texto: s.texto,
     fechaEntrega: s.fecha_entrega,
+    feedback: s.feedback ?? null,
+    feedbackProfesorId: s.feedback_profesor_id ?? null,
+    feedbackActualizadoEn: s.feedback_actualizado_en ?? null,
     archivos: s.archivos ?? [],
   }
 }
@@ -187,6 +196,23 @@ export async function entregarSolucion(ejercicioId: string, datos: { texto: stri
   if (datos.texto.trim()) form.set('texto', datos.texto.trim())
   for (const f of datos.archivos) form.append('archivos', f)
   const res = await fetchAutenticado(`${API_URL}/ejercicios/${ejercicioId}/solucion`, { method: 'POST', body: form })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return aSolucion(await res.json())
+}
+
+export async function guardarFeedbackSolucion(
+  ejercicioId: string,
+  solucionId: string,
+  comentario: string,
+): Promise<Solucion> {
+  const res = await fetchAutenticado(
+    `${API_URL}/ejercicios/${ejercicioId}/soluciones/${solucionId}/feedback`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comentario }),
+    },
+  )
   if (!res.ok) throw new Error(await mensajeDeError(res))
   return aSolucion(await res.json())
 }

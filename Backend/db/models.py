@@ -269,8 +269,15 @@ class Solucion(Base):
     )
     texto = Column(Text, nullable=True)
     fecha_entrega = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    feedback = Column(Text, nullable=True)
+    feedback_profesor_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    feedback_actualizado_en = Column(DateTime(timezone=True), nullable=True)
 
-    estudiante = relationship("Usuario", lazy="joined")
+    estudiante = relationship("Usuario", foreign_keys=[estudiante_id], lazy="joined")
     archivos = relationship(
         "SolucionArchivo",
         order_by="SolucionArchivo.fecha_creacion",

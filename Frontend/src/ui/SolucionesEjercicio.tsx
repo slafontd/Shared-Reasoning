@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { CheckCircle2, ChevronDown, FileUp, Loader2, Send, Trash2, X } from 'lucide-react'
 import {
-  cargarProgresoEjercicio, entregarSolucion, guardarProgresoEjercicio, retirarSolucion, listarSoluciones, cargarArchivoSolucion, descargarArchivoSolucion,
+  cargarProgresoEjercicio, entregarSolucion, guardarFeedbackSolucion, guardarProgresoEjercicio, retirarSolucion, listarSoluciones, cargarArchivoSolucion, descargarArchivoSolucion,
   MAX_ARCHIVOS_POR_SOLUCION, MAX_BYTES_ARCHIVO_SOLUCION, MAX_TEXTO_SOLUCION, TIPOS_SOLUCION,
   type Ejercicio, type ProgresoEjercicio, type Solucion,
 } from '../api/ejercicios'
@@ -257,6 +257,23 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
           </p>
           {entregada.texto && <p className="text-sm whitespace-pre-line break-words mt-1.5">{entregada.texto}</p>}
           <ArchivosDeSolucion solucion={entregada} onVisor={onVisor} />
+          <div className="mt-3 rounded-lg p-3" style={{ background: 'var(--bg2)', border: '1px solid var(--border)' }}>
+            <p className="text-xs font-semibold">Feedback del profesor</p>
+            {entregada.feedback ? (
+              <>
+                <p className="text-sm whitespace-pre-line break-words mt-1">{entregada.feedback}</p>
+                {entregada.feedbackActualizadoEn && (
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--ink-soft)' }}>
+                    Actualizado el {fechaHora(entregada.feedbackActualizadoEn)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                Tu profesor aún no ha enviado comentarios.
+              </p>
+            )}
+          </div>
           <div className="flex gap-2 mt-2.5">
             <button onClick={abrirParaReemplazar} className="px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-black/5 transition" style={{ border: '1px solid var(--border)' }}>
               Reemplazar
@@ -405,17 +422,121 @@ export function SolucionesRecibidas({ ejercicio, onVisor }: {
             <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Ningún estudiante ha entregado este ejercicio todavía.</p>
           ) : (
             soluciones.map((s, i) => (
-              <div key={s.id} className="rounded-lg p-3 anim-fade-in" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', animationDelay: `${Math.min(i, 6) * 0.05}s` }}>
-                <p className="text-xs font-semibold">
-                  {s.estudianteNombre} <span className="font-normal" style={{ color: 'var(--ink-soft)' }}>· {fechaHora(s.fechaEntrega)}</span>
-                </p>
-                {s.texto && <p className="text-sm whitespace-pre-line break-words mt-1">{s.texto}</p>}
-                <ArchivosDeSolucion solucion={s} onVisor={onVisor} />
-              </div>
+              <SolucionRecibida
+                key={s.id}
+                ejercicio={ejercicio}
+                solucion={s}
+                onVisor={onVisor}
+                onActualizar={(actualizada) => setSoluciones((actuales) =>
+                  actuales?.map((solucion) => solucion.id === actualizada.id ? actualizada : solucion) ?? null,
+                )}
+                animationDelay={`${Math.min(i, 6) * 0.05}s`}
+              />
             ))
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function SolucionRecibida({ ejercicio, solucion, onVisor, onActualizar, animationDelay }: {
+  ejercicio: Ejercicio
+  solucion: Solucion
+  onVisor: (url: string, nombre: string) => void
+  onActualizar: (solucion: Solucion) => void
+  animationDelay: string
+}) {
+  const [editando, setEditando] = useState(false)
+  const [comentario, setComentario] = useState(solucion.feedback ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function guardar(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault()
+    if (!comentario.trim()) {
+      setError('Escribe un comentario antes de guardar.')
+      return
+    }
+    setGuardando(true)
+    setError(null)
+    try {
+      const actualizada = await guardarFeedbackSolucion(ejercicio.id, solucion.id, comentario)
+      onActualizar(actualizada)
+      setComentario(actualizada.feedback ?? '')
+      setEditando(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar el feedback.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg p-3 anim-fade-in" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', animationDelay }}>
+      <p className="text-xs font-semibold">
+        {solucion.estudianteNombre} <span className="font-normal" style={{ color: 'var(--ink-soft)' }}>· {fechaHora(solucion.fechaEntrega)}</span>
+      </p>
+      {solucion.texto && <p className="text-sm whitespace-pre-line break-words mt-1">{solucion.texto}</p>}
+      <ArchivosDeSolucion solucion={solucion} onVisor={onVisor} />
+      <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px dashed var(--border)' }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs" style={{ color: solucion.feedback ? '#15803d' : 'var(--ink-soft)' }}>
+            {solucion.feedback ? 'Feedback enviado' : 'Pendiente de feedback'}
+            {solucion.feedbackActualizadoEn ? ` · ${fechaHora(solucion.feedbackActualizadoEn)}` : ''}
+          </p>
+          {!editando && (
+            <button
+              type="button"
+              onClick={() => {
+                setComentario(solucion.feedback ?? '')
+                setError(null)
+                setEditando(true)
+              }}
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium accent-bg text-white hover:brightness-110 transition"
+            >
+              {solucion.feedback ? 'Editar feedback' : 'Enviar feedback'}
+            </button>
+          )}
+        </div>
+        {solucion.feedback && !editando && (
+          <p className="text-sm whitespace-pre-line break-words">{solucion.feedback}</p>
+        )}
+        {editando && (
+          <form onSubmit={guardar} className="space-y-2">
+            <textarea
+              value={comentario}
+              onChange={(ev) => setComentario(ev.target.value)}
+              maxLength={5000}
+              rows={3}
+              autoFocus
+              aria-label={`Feedback para ${solucion.estudianteNombre}`}
+              placeholder="Escribe observaciones para ayudar al estudiante a mejorar…"
+              className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-y"
+              style={estiloCampo}
+            />
+            {error && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={guardando || !comentario.trim()}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium accent-bg text-white disabled:opacity-50"
+              >
+                {guardando ? 'Guardando…' : 'Guardar feedback'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditando(false); setError(null) }}
+                disabled={guardando}
+                className="rounded-lg px-3 py-1.5 text-xs hover:bg-black/5"
+                style={{ border: '1px solid var(--border)' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   )
 }

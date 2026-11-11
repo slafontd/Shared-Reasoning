@@ -71,7 +71,19 @@ class SolucionResponse(BaseModel):
     estudiante_nombre: str
     texto: str | None
     fecha_entrega: datetime
+    feedback: str | None = None
+    feedback_profesor_id: UUID | None = None
+    feedback_actualizado_en: datetime | None = None
     archivos: list[ArchivoSolucionResponse] = []
+
+
+class FeedbackActualizar(BaseModel):
+    comentario: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("comentario", mode="before")
+    @classmethod
+    def recortar_comentario(cls, valor):
+        return valor.strip() if isinstance(valor, str) else valor
 
 
 class ProgresoEjercicioActualizar(BaseModel):

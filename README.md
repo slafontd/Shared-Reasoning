@@ -258,6 +258,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `POST` `GET` | `/cursos/inscripciones` · `/cursos/mis-cursos` | Inscribirse con el código · cursos en los que estoy inscrito (US13). |
 | `GET` `POST` `DELETE` | `/cursos/{id}/ejercicios` · `/ejercicios/{id}` | Ejercicios de un curso: listar, crear y eliminar (US17). |
 | `GET` `PUT` | `/ejercicios/{id}/progreso` | Recuperar y guardar automáticamente el borrador privado de un estudiante inscrito. |
+| `PUT` | `/ejercicios/{id}/soluciones/{solucion_id}/feedback` | El profesor dueño del curso guarda o actualiza el feedback de una entrega; el estudiante lo consulta junto a su propia solución. |
 | `GET` | `/cursos/{id}/progreso-estudiantes` · `/cursos/{id}/progreso-estudiantes/{estudiante_id}` | Resumen del curso y detalle del progreso por estudiante, solo para el profesor dueño. |
 | `PUT` | `/cursos/{id}/progreso-estudiantes/{estudiante_id}/ejercicios/{ejercicio_id}/revision` | Marcar o desmarcar la revisión docente sin cambiar el estado del estudiante. |
 | `GET` | `/retos/diario` | Reto diario gamificado, generado por IA según el nivel del usuario. |

@@ -27,7 +27,7 @@ from db.models import Curso, Ejercicio, EjercicioImagen, ProgresoEjercicio, Solu
 from rate_limit import verificar_frecuencia
 from roles import ESTUDIANTE, PROFESOR
 from schemas.ejercicios import (
-    EjercicioActualizar, EjercicioCrear, EjercicioResponse, ImagenEjercicioResponse,
+    EjercicioActualizar, EjercicioCrear, EjercicioResponse, FeedbackActualizar, ImagenEjercicioResponse,
     ProgresoEjercicioActualizar, ProgresoEjercicioResponse, SolucionResponse,
 )
 
@@ -75,6 +75,9 @@ def _a_solucion_response(s: Solucion) -> SolucionResponse:
         estudiante_nombre=s.estudiante.nombre,
         texto=s.texto,
         fecha_entrega=s.fecha_entrega,
+        feedback=s.feedback,
+        feedback_profesor_id=s.feedback_profesor_id,
+        feedback_actualizado_en=s.feedback_actualizado_en,
         archivos=s.archivos,
     )
 
@@ -387,6 +390,9 @@ async def entregar_solucion(
         db.add(solucion)
     solucion.texto = texto
     solucion.fecha_entrega = func.now()
+    solucion.feedback = None
+    solucion.feedback_profesor_id = None
+    solucion.feedback_actualizado_en = None
     solucion.archivos = [
         SolucionArchivo(nombre=nombre_seguro(a.filename), mime=mime, tamano=len(contenido), datos=contenido)
         for a, (contenido, mime) in zip(archivos, validados)
@@ -436,6 +442,42 @@ def listar_soluciones(
         .all()
     )
     return [_a_solucion_response(s) for s in soluciones]
+
+
+@router.put(
+    "/ejercicios/{ejercicio_id}/soluciones/{solucion_id}/feedback",
+    response_model=SolucionResponse,
+)
+def actualizar_feedback_solucion(
+    ejercicio_id: UUID,
+    solucion_id: UUID,
+    datos: FeedbackActualizar,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    """El profesor dueño del curso guarda o actualiza el feedback de una entrega."""
+    solucion = (
+        db.query(Solucion)
+        .filter(
+            Solucion.id == solucion_id,
+            Solucion.ejercicio_id == ejercicio_id,
+        )
+        .first()
+    )
+    if solucion is None:
+        raise HTTPException(status_code=404, detail="No existe esa entrega para el ejercicio.")
+
+    ejercicio = db.get(Ejercicio, ejercicio_id)
+    if ejercicio is None:
+        raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
+    _exigir_profesor_del_curso(usuario, ejercicio.curso, "enviar feedback sobre las entregas del curso")
+
+    solucion.feedback = datos.comentario
+    solucion.feedback_profesor_id = usuario.id
+    solucion.feedback_actualizado_en = func.now()
+    db.commit()
+    db.refresh(solucion)
+    return _a_solucion_response(solucion)
 
 
 @router.get("/soluciones/archivos/{archivo_id}")
