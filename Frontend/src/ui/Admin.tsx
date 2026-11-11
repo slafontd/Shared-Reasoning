@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Plus, X, Loader2, Search, ShieldCheck, GraduationCap, User, Trash2, Pencil, UserX, UserCheck } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Plus, X, Loader2, Search, ShieldCheck, GraduationCap, User, Trash2, Pencil, UserX, UserCheck, Clock, CheckCircle2 } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
 import type { Nivel, Rol } from './tipos'
 import {
-  listarUsuariosAdmin, crearUsuarioAdmin, actualizarUsuarioAdmin, eliminarUsuarioAdmin,
+  listarUsuariosAdmin, crearUsuarioAdmin, actualizarUsuarioAdmin, eliminarUsuarioAdmin, desactivarInactivosAdmin,
   type UsuarioAdmin,
 } from '../api/admin'
 
@@ -31,6 +31,17 @@ function infoRol(rol: Rol) {
   return ROLES.find((r) => r.id === rol) ?? ROLES[2]
 }
 
+// US07: "hace 3 días", "hace 2 meses"… para la columna de último acceso.
+function haceCuanto(iso: string | null): string {
+  if (!iso) return 'Nunca'
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (dias <= 0) return 'Hoy'
+  if (dias === 1) return 'Ayer'
+  if (dias < 30) return `Hace ${dias} días`
+  const meses = Math.floor(dias / 30)
+  return meses < 12 ? `Hace ${meses} ${meses === 1 ? 'mes' : 'meses'}` : `Hace más de ${Math.floor(meses / 12)} ${meses < 24 ? 'año' : 'años'}`
+}
+
 const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)', color: 'var(--ink)' }
 
 // ============================================================
@@ -46,6 +57,8 @@ function Admin({ usuarioActualId, onVolver }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
   const [editando, setEditando] = useState<UsuarioAdmin | null>(null)
+  const [barriendo, setBarriendo] = useState(false)
+  const [aviso, setAviso] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelado = false
@@ -77,6 +90,27 @@ function Admin({ usuarioActualId, onVolver }: Props) {
       alActualizar(actualizado)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el usuario.')
+    }
+  }
+
+  // US07 (#9): desactiva todas las cuentas inactivas de una vez.
+  async function desactivarInactivos() {
+    if (!confirm('¿Desactivar todas las cuentas que llevan demasiado tiempo sin ingresar? Los administradores no se ven afectados y puedes reactivarlas después.')) return
+    setError(null)
+    setAviso(null)
+    setBarriendo(true)
+    try {
+      const r = await desactivarInactivosAdmin()
+      setAviso(r.desactivados === 0
+        ? `Ninguna cuenta supera los ${r.diasInactividad} días de inactividad.`
+        : r.desactivados === 1
+          ? `Se desactivó 1 cuenta con más de ${r.diasInactividad} días sin ingresar: ${r.correos[0]}.`
+          : `Se desactivaron ${r.desactivados} cuentas con más de ${r.diasInactividad} días sin ingresar: ${r.correos.join(', ')}.`)
+      setUsuarios(await listarUsuariosAdmin({ busqueda }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron desactivar las cuentas inactivas.')
+    } finally {
+      setBarriendo(false)
     }
   }
 
@@ -123,6 +157,15 @@ function Admin({ usuarioActualId, onVolver }: Props) {
             />
           </div>
           <button
+            onClick={desactivarInactivos}
+            disabled={barriendo}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl panel text-sm font-medium hover:-translate-y-0.5 transition disabled:opacity-50"
+            title="Desactivar las cuentas que superan el plazo de inactividad"
+          >
+            {barriendo ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}
+            Desactivar inactivos
+          </button>
+          <button
             onClick={() => setModalCrearAbierto(true)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
           >
@@ -130,6 +173,14 @@ function Admin({ usuarioActualId, onVolver }: Props) {
             Nuevo usuario
           </button>
         </div>
+
+        {aviso && (
+          <div role="status" className="flex items-start gap-2 rounded-xl px-3 py-2 text-sm" style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.4)' }}>
+            <CheckCircle2 size={16} className="shrink-0 mt-0.5" style={{ color: '#16a34a' }} />
+            <span className="flex-1">{aviso}</span>
+            <button onClick={() => setAviso(null)} className="grid place-items-center w-6 h-6 rounded hover:bg-black/5" title="Cerrar aviso"><X size={14} /></button>
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="rounded-xl px-3 py-2 text-sm" style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.4)', color: '#dc2626' }}>
@@ -154,6 +205,7 @@ function Admin({ usuarioActualId, onVolver }: Props) {
                   <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--ink-soft)' }}>Nivel</th>
                   <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--ink-soft)' }}>Rol</th>
                   <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--ink-soft)' }}>Estado</th>
+                  <th className="text-left px-4 py-2.5 font-medium" style={{ color: 'var(--ink-soft)' }}>Último acceso</th>
                   <th className="text-right px-4 py-2.5 font-medium" style={{ color: 'var(--ink-soft)' }}>Acciones</th>
                 </tr>
               </thead>
@@ -186,6 +238,12 @@ function Admin({ usuarioActualId, onVolver }: Props) {
                         >
                           {u.activo ? 'Activo' : 'Desactivado'}
                         </span>
+                        {!u.activo && u.desactivadoPorInactividad && (
+                          <p className="text-[11px] mt-1" style={{ color: 'var(--ink-soft)' }}>por inactividad</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--ink-soft)' }} title={u.ultimoAcceso ? new Date(u.ultimoAcceso).toLocaleString('es-CO') : undefined}>
+                        {haceCuanto(u.ultimoAcceso)}
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-end gap-1">

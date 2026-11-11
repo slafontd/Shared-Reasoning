@@ -47,6 +47,12 @@ class Usuario(Base):
     # rechaza de inmediato aunque su JWT siga vigente.
     rol = Column(String(20), nullable=False, default=ROL_POR_DEFECTO)
     activo = Column(Boolean, nullable=False, default=True)
+    # Desactivación por inactividad (US07, ver inactividad.py): última vez que
+    # la cuenta inició sesión o usó la app. Si pasa más de DIAS_INACTIVIDAD
+    # sin uso, la cuenta se desactiva (activo=False) y se marca el motivo
+    # para que el usuario y el administrador sepan por qué.
+    ultimo_acceso = Column(DateTime(timezone=True), nullable=True)
+    desactivado_por_inactividad = Column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class Sesion(Base):
