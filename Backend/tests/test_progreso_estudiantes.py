@@ -35,7 +35,8 @@ def estudiante(cliente, curso):
         headers=cabeceras,
     )
     assert respuesta.status_code == 201, respuesta.text
-    return cabeceras, respuesta.json()["id"]
+    # La inscripción responde con el CURSO; el id del estudiante sale de /auth/me.
+    return cabeceras, cliente.get("/auth/me", headers=cabeceras).json()["usuario_id"]
 
 
 def test_profesor_consulta_estudiantes_y_progreso_real(

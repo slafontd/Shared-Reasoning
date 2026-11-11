@@ -18,7 +18,13 @@ from auth import hashear_contrasena, requerir_admin
 from db.database import get_db
 from db.models import Usuario
 from roles import ADMINISTRADOR
-from schemas.admin import AdminUsuarioActualizar, AdminUsuarioCrear, AdminUsuarioResponse
+from inactividad import DIAS_INACTIVIDAD, ahora, desactivar_inactivos
+from schemas.admin import (
+    AdminUsuarioActualizar,
+    AdminUsuarioCrear,
+    AdminUsuarioResponse,
+    DesactivacionInactivosResponse,
+)
 
 router = APIRouter(prefix="/admin/usuarios", tags=["admin"], dependencies=[Depends(requerir_admin)])
 
@@ -51,6 +57,18 @@ def listar_usuarios(
         .all()
     )
     return usuarios
+
+
+@router.post("/desactivar-inactivos", response_model=DesactivacionInactivosResponse)
+def desactivar_cuentas_inactivas(db: Session = Depends(get_db)):
+    """US07 (#9): desactiva de una vez todas las cuentas que llevan más de
+    DIAS_INACTIVIDAD días sin uso (los administradores no se tocan)."""
+    desactivados = desactivar_inactivos(db)
+    return DesactivacionInactivosResponse(
+        dias_inactividad=DIAS_INACTIVIDAD,
+        desactivados=len(desactivados),
+        correos=[u.email for u in desactivados],
+    )
 
 
 @router.post("", response_model=AdminUsuarioResponse, status_code=201)
@@ -112,6 +130,13 @@ def actualizar_usuario(
     if datos.rol is not None:
         destino.rol = datos.rol
     if datos.activo is not None:
+        if datos.activo and not destino.activo:
+            # US07: al reactivar, el plazo de inactividad vuelve a empezar;
+            # si no, la cuenta se desactivaría otra vez en su próximo login.
+            destino.ultimo_acceso = ahora()
+            destino.desactivado_por_inactividad = False
+        elif not datos.activo:
+            destino.desactivado_por_inactividad = False  # la desactivó un admin, no la inactividad
         destino.activo = datos.activo
 
     try:

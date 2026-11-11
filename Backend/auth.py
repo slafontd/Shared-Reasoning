@@ -288,15 +288,22 @@ def obtener_usuario_actual(
     # acceso de inmediato, aunque su JWT siga vigente — no basta con bloquear
     # el login, hay que revisarlo en cada petición autenticada.
     if not usuario.activo:
+        from inactividad import MENSAJE_DESACTIVADA
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tu cuenta fue desactivada. Contacta a un administrador.",
+            detail=MENSAJE_DESACTIVADA if usuario.desactivado_por_inactividad
+            else "Tu cuenta fue desactivada. Contacta a un administrador.",
         )
     if not usuario.email_verificado:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Debes verificar tu correo antes de utilizar la cuenta.",
         )
+    # US07: usar la app también cuenta como actividad (no solo iniciar sesión);
+    # si no, alguien con la sesión abierta semanas se desactivaría al volver
+    # a entrar. Import local: inactividad.py importa roles/modelos, no auth.
+    from inactividad import registrar_acceso
+    registrar_acceso(db, usuario)
     return usuario
 
 

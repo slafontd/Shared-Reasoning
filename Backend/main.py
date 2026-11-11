@@ -17,6 +17,7 @@ from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
 import cursos
+from inactividad import MENSAJE_DESACTIVADA, desactivar_por_inactividad, esta_inactivo, registrar_acceso
 import ejercicios
 import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
@@ -239,11 +240,22 @@ def login(datos: LoginRequest, request: Request, db: Session = Depends(get_db)):
     # A diferencia de obtener_usuario_actual (que ya rechaza cada petición de
     # una cuenta desactivada), acá hace falta el chequeo aparte: sin esto, un
     # usuario desactivado podría volver a loguearse y sacar un JWT nuevo.
+    # US07: la inactividad se revisa DESPUÉS de comprobar la contraseña, para
+    # no revelar a un tercero el estado de una cuenta ajena.
+    if usuario.activo and esta_inactivo(usuario):
+        desactivar_por_inactividad(usuario)
+        db.commit()
     if not usuario.activo:
-        raise HTTPException(status_code=403, detail="Tu cuenta fue desactivada. Contacta a un administrador.")
+        detalle = (
+            MENSAJE_DESACTIVADA
+            if usuario.desactivado_por_inactividad
+            else "Tu cuenta fue desactivada. Contacta a un administrador."
+        )
+        raise HTTPException(status_code=403, detail=detalle)
     if not usuario.email_verificado:
         raise HTTPException(status_code=403, detail="Debes verificar tu correo antes de iniciar sesión.")
 
+    registrar_acceso(db, usuario, forzar=True)
     token = crear_token(usuario.id)
     return TokenResponse(
         access_token=token,

@@ -22,8 +22,18 @@ class AdminUsuarioResponse(BaseModel):
     rol: str
     activo: bool
     fecha_registro: datetime
+    # US07: para que el administrador vea quién lleva tiempo sin entrar y
+    # por qué está desactivada una cuenta.
+    ultimo_acceso: datetime | None = None
+    desactivado_por_inactividad: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class DesactivacionInactivosResponse(BaseModel):
+    dias_inactividad: int
+    desactivados: int
+    correos: list[str]
 
 
 class AdminUsuarioCrear(BaseModel):

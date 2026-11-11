@@ -15,6 +15,10 @@ export type UsuarioAdmin = {
   rol: Rol
   activo: boolean
   fechaRegistro: string
+  // US07: última vez que la cuenta entró o usó la app, y si su desactivación
+  // fue automática por inactividad (y no de un administrador).
+  ultimoAcceso: string | null
+  desactivadoPorInactividad: boolean
 }
 
 type UsuarioAdminAPI = {
@@ -25,6 +29,8 @@ type UsuarioAdminAPI = {
   rol: Rol
   activo: boolean
   fecha_registro: string
+  ultimo_acceso?: string | null
+  desactivado_por_inactividad?: boolean
 }
 
 function aUsuarioAdmin(u: UsuarioAdminAPI): UsuarioAdmin {
@@ -36,6 +42,8 @@ function aUsuarioAdmin(u: UsuarioAdminAPI): UsuarioAdmin {
     rol: u.rol,
     activo: u.activo,
     fechaRegistro: u.fecha_registro,
+    ultimoAcceso: u.ultimo_acceso ?? null,
+    desactivadoPorInactividad: u.desactivado_por_inactividad ?? false,
   }
 }
 
@@ -101,4 +109,13 @@ export async function actualizarUsuarioAdmin(
 export async function eliminarUsuarioAdmin(id: string): Promise<void> {
   const res = await fetchAutenticado(`${API_URL}/admin/usuarios/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await mensajeDeError(res))
+}
+
+// US07 (#9): desactiva de una vez todas las cuentas que superaron el plazo
+// de inactividad (DIAS_INACTIVIDAD en el .env del backend).
+export async function desactivarInactivosAdmin(): Promise<{ diasInactividad: number; desactivados: number; correos: string[] }> {
+  const res = await fetchAutenticado(`${API_URL}/admin/usuarios/desactivar-inactivos`, { method: 'POST' })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  const datos = await res.json()
+  return { diasInactividad: datos.dias_inactividad, desactivados: datos.desactivados, correos: datos.correos }
 }
