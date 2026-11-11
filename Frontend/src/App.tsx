@@ -10,6 +10,7 @@ import Retos from './ui/Retos'
 import RetoDiario from './ui/RetoDiario'
 import Cursos from './ui/Cursos'
 import Admin from './ui/Admin'
+import Metricas from './ui/Metricas'
 import DevApp from './DevApp'
 import type { Sesion, Nivel } from './ui/tipos'
 import { actualizarNivel, alExpirarSesion, borrarToken, obtenerUsuarioActual, type Usuario } from './api/auth'
@@ -38,7 +39,7 @@ function App() {
   // (y de la encuesta de nivel si hace falta), antes de ir a "bienvenida".
   const [tokenCompartido] = useState(() => new URLSearchParams(window.location.search).get('compartido'))
   const [paso, setPaso] = useState<Paso>('intro')
-  const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | 'cursos' | 'admin' | null>(null)
+  const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | 'cursos' | 'admin' | 'metricas' | null>(null)
   const [nivel, setNivel] = useState<Nivel>('intermedio')
   const [sesion, setSesion] = useState<Sesion | null>(null)
   // Usuario autenticado (nombre/correo) para el panel de cuenta del sidebar.
@@ -113,6 +114,9 @@ function App() {
   if (pantallaExtra === 'admin') {
     return <Admin usuarioActualId={usuario!.usuarioId} onVolver={() => setPantallaExtra(null)} />
   }
+  if (pantallaExtra === 'metricas') {
+    return <Metricas esAdmin={usuario?.rol === 'administrador'} onVolver={() => setPantallaExtra(null)} />
+  }
 
   if (sesion) return (
     <VistaPrincipal
@@ -127,6 +131,7 @@ function App() {
       onAbrirRetos={() => setPantallaExtra('retos')}
       onAbrirCursos={() => setPantallaExtra('cursos')}
       onAbrirAdmin={() => setPantallaExtra('admin')}
+      onAbrirMetricas={() => setPantallaExtra('metricas')}
     />
   )
 
@@ -158,6 +163,7 @@ function App() {
           onAbrirRetos={() => setPantallaExtra('retos')}
           onAbrirCursos={() => setPantallaExtra('cursos')}
           onAbrirAdmin={() => setPantallaExtra('admin')}
+          onAbrirMetricas={() => setPantallaExtra('metricas')}
         />
       )
   }

@@ -19,6 +19,7 @@ import retos
 import cursos
 from inactividad import MENSAJE_DESACTIVADA, desactivar_por_inactividad, esta_inactivo, registrar_acceso
 import ejercicios
+import metricas_plataforma
 import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
 from schemas.retos import RetoDiario
@@ -93,6 +94,7 @@ metricas = Metricas()
 
 app.include_router(cursos.router)
 app.include_router(ejercicios.router)
+app.include_router(metricas_plataforma.router)
 app.include_router(admin.router)
 
 
