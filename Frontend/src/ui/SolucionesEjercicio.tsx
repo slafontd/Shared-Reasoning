@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ChevronDown, FileUp, Loader2, Send, Trash2, X } from 'lucide-react'
 import {
-  entregarSolucion, retirarSolucion, listarSoluciones, cargarArchivoSolucion, descargarArchivoSolucion,
+  cargarProgresoEjercicio, entregarSolucion, guardarProgresoEjercicio, retirarSolucion, listarSoluciones, cargarArchivoSolucion, descargarArchivoSolucion,
   MAX_ARCHIVOS_POR_SOLUCION, MAX_BYTES_ARCHIVO_SOLUCION, MAX_TEXTO_SOLUCION, TIPOS_SOLUCION,
-  type Ejercicio, type Solucion,
+  type Ejercicio, type ProgresoEjercicio, type Solucion,
 } from '../api/ejercicios'
 import { MiniaturaArchivo, validarArchivos, tamanoLegible } from './ArchivosAutenticados'
 
@@ -12,6 +12,13 @@ const LIMITES = { tipos: TIPOS_SOLUCION, maxBytes: MAX_BYTES_ARCHIVO_SOLUCION, m
 
 function fechaHora(iso: string) {
   return new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+function mensajeDeFalla(error: unknown) {
+  if (error instanceof TypeError && error.message === 'Failed to fetch') {
+    return 'No se pudo conectar con el servidor. Verifica que el backend esté encendido e inténtalo de nuevo.'
+  }
+  return error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 }
 
 function ArchivosDeSolucion({ solucion, onVisor }: { solucion: Solucion; onVisor: (url: string, nombre: string) => void }) {
@@ -44,14 +51,151 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
   const entregada = ejercicio.miSolucion
   const [editando, setEditando] = useState(false)
   const [texto, setTexto] = useState('')
+  const [cargandoProgreso, setCargandoProgreso] = useState(!entregada)
+  const [progresoListo, setProgresoListo] = useState(false)
+  const [estadoProgreso, setEstadoProgreso] = useState<'cargando' | 'listo' | 'pendiente' | 'guardando' | 'guardado' | 'error'>('cargando')
+  const [reintentosCarga, setReintentosCarga] = useState(0)
   const [archivos, setArchivos] = useState<File[]>([])
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const progresoActual = useRef<Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'>>({
+    respuestas: {},
+    preguntasCompletadas: [],
+    puntoActual: 0,
+  })
+  const ultimoGuardado = useRef<string | null>(null)
+  const ultimoEncolado = useRef<string | null>(null)
+  const colaGuardados = useRef<Promise<void>>(Promise.resolve())
+  const encolarRef = useRef<(progreso: Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'>) => void>(() => {})
+  const progresoListoRef = useRef(progresoListo)
+  const formularioActivoRef = useRef(!entregada || editando)
+  const temporizadorRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mostrarFormulario = !entregada || editando
+
+  useEffect(() => {
+    progresoListoRef.current = progresoListo
+    formularioActivoRef.current = mostrarFormulario
+  }, [progresoListo, mostrarFormulario])
+
+  useEffect(() => {
+    let cancelado = false
+    if (entregada) {
+      return () => { cancelado = true }
+    }
+
+    cargarProgresoEjercicio(ejercicio.id)
+      .then((progreso) => {
+        if (cancelado) return
+        const respuestas = progreso?.respuestas ?? {}
+        const inicial: Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'> = {
+          respuestas,
+          preguntasCompletadas: progreso?.preguntasCompletadas ?? [],
+          puntoActual: progreso?.puntoActual ?? 0,
+        }
+        progresoActual.current = inicial
+        const serializado = JSON.stringify(inicial)
+        ultimoGuardado.current = serializado
+        ultimoEncolado.current = serializado
+        setTexto(typeof respuestas.respuesta === 'string' ? respuestas.respuesta : '')
+        setProgresoListo(true)
+        setError(null)
+        setEstadoProgreso(progreso ? 'guardado' : 'listo')
+      })
+      .catch((e) => {
+        if (cancelado) return
+        const inicial: Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'> = {
+          respuestas: {},
+          preguntasCompletadas: [],
+          puntoActual: 0,
+        }
+        progresoActual.current = inicial
+        const serializado = JSON.stringify(inicial)
+        ultimoGuardado.current = serializado
+        ultimoEncolado.current = serializado
+        setTexto('')
+        setProgresoListo(true)
+        setError(`No se pudo recuperar el borrador. El formulario sigue disponible. ${mensajeDeFalla(e)}`)
+        setEstadoProgreso('error')
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoProgreso(false)
+      })
+    return () => { cancelado = true }
+  }, [ejercicio.id, entregada, reintentosCarga])
+
+  const encolarGuardado = useCallback((progreso: Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'>) => {
+    const serializado = JSON.stringify(progreso)
+    if (serializado === ultimoEncolado.current) return
+    ultimoEncolado.current = serializado
+    const pendiente = colaGuardados.current.catch(() => {}).then(async () => {
+      await guardarProgresoEjercicio(ejercicio.id, progreso)
+      ultimoGuardado.current = serializado
+      if (ultimoEncolado.current === serializado && progresoListoRef.current && formularioActivoRef.current) {
+        setEstadoProgreso('guardado')
+        setError(null)
+      }
+    })
+    colaGuardados.current = pendiente
+    pendiente.catch((e: unknown) => {
+      if (ultimoEncolado.current === serializado) {
+        ultimoEncolado.current = ultimoGuardado.current
+      }
+      if (ultimoEncolado.current === ultimoGuardado.current && progresoListoRef.current && formularioActivoRef.current) {
+        setEstadoProgreso('error')
+        setError(`No se pudo guardar el progreso. ${mensajeDeFalla(e)}`)
+      }
+    })
+  }, [ejercicio.id])
+
+  useEffect(() => {
+    encolarRef.current = encolarGuardado
+  }, [encolarGuardado])
+
+  useEffect(() => {
+    if (!mostrarFormulario || !progresoListo || cargandoProgreso) return
+    const snapshot = progresoActual.current
+    if (JSON.stringify(snapshot) === ultimoEncolado.current) return
+    setEstadoProgreso('pendiente')
+    temporizadorRef.current = setTimeout(() => {
+      setEstadoProgreso('guardando')
+      encolarGuardado(snapshot)
+    }, 650)
+    return () => {
+      if (temporizadorRef.current) clearTimeout(temporizadorRef.current)
+    }
+  }, [texto, mostrarFormulario, progresoListo, cargandoProgreso, encolarGuardado])
+
+  useEffect(() => () => {
+    if (temporizadorRef.current) clearTimeout(temporizadorRef.current)
+    const debeGuardar = progresoListoRef.current && formularioActivoRef.current
+    formularioActivoRef.current = false
+    if (debeGuardar) {
+      encolarRef.current(progresoActual.current)
+    }
+  }, [])
+
+  function cambiarTextoBorrador(valor: string) {
+    setTexto(valor)
+    progresoActual.current = {
+      ...progresoActual.current,
+      respuestas: { ...progresoActual.current.respuestas, respuesta: valor },
+    }
+    setError(null)
+  }
 
   function abrirParaReemplazar() {
     setTexto(entregada?.texto ?? '')
+    progresoActual.current = {
+      ...progresoActual.current,
+      respuestas: { ...progresoActual.current.respuestas, respuesta: entregada?.texto ?? '' },
+    }
+    const serializado = JSON.stringify(progresoActual.current)
+    ultimoGuardado.current = serializado
+    ultimoEncolado.current = serializado
     setArchivos([])
+    setProgresoListo(true)
+    setCargandoProgreso(false)
+    setEstadoProgreso('listo')
     setError(null)
     setEditando(true)
   }
@@ -68,16 +212,24 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
       setError('Escribe una respuesta o adjunta al menos un archivo.')
       return
     }
+    if (!progresoListo) {
+      setError('Recupera tu progreso antes de entregar la solución.')
+      return
+    }
     setError(null)
     setEnviando(true)
+    if (temporizadorRef.current) clearTimeout(temporizadorRef.current)
     try {
       const solucion = await entregarSolucion(ejercicio.id, { texto, archivos })
       onCambio(solucion)
       setEditando(false)
       setTexto('')
+      progresoActual.current = { respuestas: {}, preguntasCompletadas: [], puntoActual: 0 }
+      ultimoGuardado.current = null
+      ultimoEncolado.current = null
       setArchivos([])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo entregar la solución.')
+      setError(`No se pudo entregar la solución. ${mensajeDeFalla(e)}`)
     } finally {
       setEnviando(false)
     }
@@ -88,6 +240,8 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
     setError(null)
     try {
       await retirarSolucion(ejercicio.id)
+      setProgresoListo(false)
+      setCargandoProgreso(true)
       onCambio(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo retirar la solución.')
@@ -119,13 +273,50 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
           <p className="text-xs font-semibold">{entregada ? 'Reemplazar tu solución' : 'Sube tu solución'}</p>
           <textarea
             value={texto}
-            onChange={(ev) => setTexto(ev.target.value)}
+            onChange={(ev) => cambiarTextoBorrador(ev.target.value)}
+            onBlur={() => {
+              if (progresoListo && mostrarFormulario && estadoProgreso !== 'error') {
+                setEstadoProgreso('guardando')
+                encolarGuardado(progresoActual.current)
+              }
+            }}
             maxLength={MAX_TEXTO_SOLUCION}
             rows={3}
             placeholder="Tu respuesta o procedimiento (opcional si adjuntas un archivo)"
+            disabled={cargandoProgreso}
             className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-y"
             style={estiloCampo}
           />
+          {estadoProgreso === 'cargando' && cargandoProgreso && (
+            <p role="status" className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ink-soft)' }}>
+              <Loader2 size={12} className="animate-spin" /> Recuperando tu progreso…
+            </p>
+          )}
+          {estadoProgreso === 'pendiente' && <p role="status" className="text-xs" style={{ color: 'var(--ink-soft)' }}>Cambios pendientes de guardar…</p>}
+          {estadoProgreso === 'guardando' && <p role="status" className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ink-soft)' }}><Loader2 size={12} className="animate-spin" /> Guardando progreso…</p>}
+          {estadoProgreso === 'guardado' && progresoListo && (
+            <p role="status" className="flex items-center gap-1.5 text-xs" style={{ color: '#15803d' }}>
+              <CheckCircle2 size={12} /> Progreso guardado automáticamente
+            </p>
+          )}
+          {estadoProgreso === 'listo' && progresoListo && (
+            <p role="status" className="text-xs" style={{ color: 'var(--ink-soft)' }}>Tu respuesta se guardará automáticamente.</p>
+          )}
+          {!progresoListo && !entregada && !cargandoProgreso && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                setCargandoProgreso(true)
+                setEstadoProgreso('cargando')
+                setReintentosCarga((n) => n + 1)
+              }}
+              className="text-xs underline"
+              style={{ color: 'var(--accent)' }}
+            >
+              Reintentar cargar el progreso
+            </button>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer hover:brightness-95 transition" style={{ border: '1px dashed var(--border)', color: 'var(--ink-soft)' }}>
               <FileUp size={13} />
@@ -150,7 +341,7 @@ export function SolucionEstudiante({ ejercicio, onCambio, onVisor }: {
           <div className="flex items-center gap-2">
             <button
               type="submit"
-              disabled={enviando}
+              disabled={enviando || cargandoProgreso}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg accent-bg text-white text-xs font-medium shadow hover:brightness-110 disabled:opacity-40 transition"
             >
               {enviando ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}

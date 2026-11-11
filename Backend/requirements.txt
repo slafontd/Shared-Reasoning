@@ -6,7 +6,7 @@ python-dotenv
 openai
 langgraph
 langchain-openai
-sqlalchemy
+sqlalchemy<2.1
 alembic
 psycopg2-binary
 argon2-cffi

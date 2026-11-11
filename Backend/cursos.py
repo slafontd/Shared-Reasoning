@@ -15,10 +15,16 @@ from sqlalchemy.orm import Session
 from auth import obtener_usuario_actual, requerir_rol
 from codigos_curso import normalizar_codigo, nuevo_codigo_unico
 from db.database import get_db
-from db.models import Curso, Inscripcion, Usuario
+from db.models import (
+    Curso, Ejercicio, Inscripcion, ProgresoEjercicio, RevisionEjercicio, Solucion, Usuario,
+)
 from rate_limit import verificar_frecuencia
 from roles import ADMINISTRADOR, ESTUDIANTE, PROFESOR
 from schemas.cursos import CursoCrear, CursoResponse, InscripcionCrear
+from schemas.seguimiento import (
+    CursoProgresoResponse, DetalleProgresoEstudiante, EjercicioProgresoDetalle,
+    EstudianteProgreso, RevisionEjercicioActualizar, RevisionEjercicioResponse,
+)
 
 router = APIRouter(prefix="/cursos", tags=["cursos"])
 
@@ -200,6 +206,262 @@ def mis_cursos(
         .all()
     )
     return [a_respuesta(i.curso, usuario, inscrito=True) for i in inscripciones]
+
+
+def _exigir_profesor_del_curso(usuario: Usuario, curso: Curso) -> None:
+    if usuario.rol != PROFESOR or curso.creado_por != usuario.id:
+        raise HTTPException(status_code=403, detail="Solo el profesor del curso puede consultar el progreso de sus estudiantes.")
+
+
+def _obtener_datos_seguimiento(db: Session, curso: Curso, estudiante: Usuario):
+    ejercicios = (
+        db.query(Ejercicio)
+        .filter(Ejercicio.curso_id == curso.id)
+        .order_by(Ejercicio.fecha_creacion, Ejercicio.id)
+        .all()
+    )
+    ejercicio_ids = [ejercicio.id for ejercicio in ejercicios]
+    if not ejercicio_ids:
+        return ejercicios, {}, {}, {}
+
+    progresos = {
+        fila.ejercicio_id: fila
+        for fila in db.query(ProgresoEjercicio).filter(
+            ProgresoEjercicio.estudiante_id == estudiante.id,
+            ProgresoEjercicio.ejercicio_id.in_(ejercicio_ids),
+        )
+    }
+    soluciones = {
+        fila.ejercicio_id: fila
+        for fila in db.query(Solucion).filter(
+            Solucion.estudiante_id == estudiante.id,
+            Solucion.ejercicio_id.in_(ejercicio_ids),
+        )
+    }
+    revisiones = {
+        fila.ejercicio_id: fila
+        for fila in db.query(RevisionEjercicio).filter(
+            RevisionEjercicio.estudiante_id == estudiante.id,
+            RevisionEjercicio.ejercicio_id.in_(ejercicio_ids),
+        )
+    }
+    return ejercicios, progresos, soluciones, revisiones
+
+
+def _estado_ejercicio(ejercicio: Ejercicio, progresos, soluciones) -> str:
+    if ejercicio.id in soluciones:
+        return "completado"
+    if ejercicio.id in progresos:
+        return "en_progreso"
+    return "no_iniciado"
+
+
+def _actividad_ejercicio(ejercicio: Ejercicio, progresos, soluciones):
+    fechas = []
+    progreso = progresos.get(ejercicio.id)
+    solucion = soluciones.get(ejercicio.id)
+    if progreso and progreso.actualizado_en:
+        fechas.append(progreso.actualizado_en)
+    if solucion and solucion.fecha_entrega:
+        fechas.append(solucion.fecha_entrega)
+    return max(fechas) if fechas else None
+
+
+def _resumen_estudiante(estudiante: Usuario, ejercicios, progresos, soluciones) -> EstudianteProgreso:
+    completados = sum(_estado_ejercicio(e, progresos, soluciones) == "completado" for e in ejercicios)
+    en_progreso = sum(_estado_ejercicio(e, progresos, soluciones) == "en_progreso" for e in ejercicios)
+    total = len(ejercicios)
+    actividades = [
+        fecha
+        for ejercicio in ejercicios
+        if (fecha := _actividad_ejercicio(ejercicio, progresos, soluciones)) is not None
+    ]
+    return EstudianteProgreso(
+        estudiante_id=estudiante.id,
+        nombre=estudiante.nombre,
+        total_ejercicios=total,
+        completados=completados,
+        en_progreso=en_progreso,
+        sin_iniciar=total - completados - en_progreso,
+        porcentaje=round(completados / total * 100) if total else 0,
+        ultima_actividad=max(actividades) if actividades else None,
+    )
+
+
+@router.get("/{curso_id}/progreso-estudiantes", response_model=CursoProgresoResponse)
+def progreso_estudiantes_curso(
+    curso_id: UUID,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    curso = db.get(Curso, curso_id)
+    if curso is None:
+        raise HTTPException(status_code=404, detail="Curso no encontrado.")
+    _exigir_profesor_del_curso(usuario, curso)
+
+    estudiantes = (
+        db.query(Usuario)
+        .join(Inscripcion, Inscripcion.usuario_id == Usuario.id)
+        .filter(Inscripcion.curso_id == curso.id, Usuario.rol == ESTUDIANTE)
+        .order_by(Usuario.nombre, Usuario.id)
+        .all()
+    )
+    ejercicios = (
+        db.query(Ejercicio)
+        .filter(Ejercicio.curso_id == curso.id)
+        .order_by(Ejercicio.fecha_creacion, Ejercicio.id)
+        .all()
+    )
+    ids_ejercicios = [ejercicio.id for ejercicio in ejercicios]
+    ids_estudiantes = [estudiante.id for estudiante in estudiantes]
+
+    progresos_por_estudiante = {}
+    soluciones_por_estudiante = {}
+    if ids_ejercicios and ids_estudiantes:
+        for fila in db.query(ProgresoEjercicio).filter(
+            ProgresoEjercicio.ejercicio_id.in_(ids_ejercicios),
+            ProgresoEjercicio.estudiante_id.in_(ids_estudiantes),
+        ):
+            progresos_por_estudiante.setdefault(fila.estudiante_id, {})[fila.ejercicio_id] = fila
+        for fila in db.query(Solucion).filter(
+            Solucion.ejercicio_id.in_(ids_ejercicios),
+            Solucion.estudiante_id.in_(ids_estudiantes),
+        ):
+            soluciones_por_estudiante.setdefault(fila.estudiante_id, {})[fila.ejercicio_id] = fila
+
+    return CursoProgresoResponse(
+        curso_id=curso.id,
+        curso_nombre=curso.nombre,
+        total_ejercicios=len(ejercicios),
+        estudiantes=[
+            _resumen_estudiante(
+                estudiante,
+                ejercicios,
+                progresos_por_estudiante.get(estudiante.id, {}),
+                soluciones_por_estudiante.get(estudiante.id, {}),
+            )
+            for estudiante in estudiantes
+        ],
+    )
+
+
+@router.get(
+    "/{curso_id}/progreso-estudiantes/{estudiante_id}",
+    response_model=DetalleProgresoEstudiante,
+)
+def detalle_progreso_estudiante(
+    curso_id: UUID,
+    estudiante_id: UUID,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    curso = db.get(Curso, curso_id)
+    if curso is None:
+        raise HTTPException(status_code=404, detail="Curso no encontrado.")
+    _exigir_profesor_del_curso(usuario, curso)
+
+    inscripcion = db.query(Inscripcion.id).filter(
+        Inscripcion.curso_id == curso.id,
+        Inscripcion.usuario_id == estudiante_id,
+    ).first()
+    estudiante = db.get(Usuario, estudiante_id)
+    if inscripcion is None or estudiante is None or estudiante.rol != ESTUDIANTE:
+        raise HTTPException(status_code=404, detail="El estudiante no está inscrito en este curso.")
+
+    ejercicios, progresos, soluciones, revisiones = _obtener_datos_seguimiento(db, curso, estudiante)
+    resumen = _resumen_estudiante(estudiante, ejercicios, progresos, soluciones)
+    return DetalleProgresoEstudiante(
+        curso_id=curso.id,
+        curso_nombre=curso.nombre,
+        estudiante_id=resumen.estudiante_id,
+        estudiante_nombre=resumen.nombre,
+        total_ejercicios=resumen.total_ejercicios,
+        completados=resumen.completados,
+        en_progreso=resumen.en_progreso,
+        sin_iniciar=resumen.sin_iniciar,
+        porcentaje=resumen.porcentaje,
+        ultima_actividad=resumen.ultima_actividad,
+        ejercicios=[
+            EjercicioProgresoDetalle(
+                ejercicio_id=ejercicio.id,
+                titulo=ejercicio.titulo,
+                estado=_estado_ejercicio(ejercicio, progresos, soluciones),
+                ultima_actividad=_actividad_ejercicio(ejercicio, progresos, soluciones),
+                revisado=ejercicio.id in revisiones,
+                revisado_en=revisiones[ejercicio.id].revisado_en if ejercicio.id in revisiones else None,
+            )
+            for ejercicio in ejercicios
+        ],
+    )
+
+
+@router.put(
+    "/{curso_id}/progreso-estudiantes/{estudiante_id}/ejercicios/{ejercicio_id}/revision",
+    response_model=RevisionEjercicioResponse,
+)
+def marcar_ejercicio_revisado(
+    curso_id: UUID,
+    estudiante_id: UUID,
+    ejercicio_id: UUID,
+    datos: RevisionEjercicioActualizar,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    curso = db.get(Curso, curso_id)
+    if curso is None:
+        raise HTTPException(status_code=404, detail="Curso no encontrado.")
+    _exigir_profesor_del_curso(usuario, curso)
+
+    ejercicio = db.query(Ejercicio).filter(
+        Ejercicio.id == ejercicio_id,
+        Ejercicio.curso_id == curso.id,
+    ).first()
+    if ejercicio is None:
+        raise HTTPException(status_code=404, detail="El ejercicio no pertenece a este curso.")
+    estudiante = db.get(Usuario, estudiante_id)
+    if (
+        estudiante is None
+        or estudiante.rol != ESTUDIANTE
+        or not db.query(Inscripcion.id).filter(
+            Inscripcion.curso_id == curso.id,
+            Inscripcion.usuario_id == estudiante_id,
+        ).first()
+    ):
+        raise HTTPException(status_code=404, detail="El estudiante no está inscrito en este curso.")
+
+    revision = db.query(RevisionEjercicio).filter(
+        RevisionEjercicio.ejercicio_id == ejercicio.id,
+        RevisionEjercicio.estudiante_id == estudiante_id,
+    ).first()
+    if not datos.revisado:
+        if revision is not None:
+            db.delete(revision)
+            db.commit()
+        return RevisionEjercicioResponse(
+            ejercicio_id=ejercicio.id,
+            estudiante_id=estudiante_id,
+            revisado=False,
+            revisado_en=None,
+        )
+
+    if revision is None:
+        revision = RevisionEjercicio(
+            ejercicio_id=ejercicio.id,
+            estudiante_id=estudiante_id,
+            profesor_id=usuario.id,
+        )
+        db.add(revision)
+    else:
+        revision.profesor_id = usuario.id
+        revision.revisado_en = func.now()
+    db.commit()
+    db.refresh(revision)
+    return RevisionEjercicioResponse(
+        ejercicio_id=ejercicio.id,
+        estudiante_id=estudiante_id,
+        revisado=True,
+        revisado_en=revision.revisado_en,
+    )
 
 
 @router.get("/{curso_id}", response_model=CursoResponse)

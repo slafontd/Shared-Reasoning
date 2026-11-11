@@ -298,3 +298,62 @@ class SolucionArchivo(Base):
     tamano = Column(Integer, nullable=False)
     datos = deferred(Column(LargeBinary, nullable=False))
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ProgresoEjercicio(Base):
+    """Borrador privado del estudiante, distinto de su solución entregada."""
+    __tablename__ = "progresos_ejercicios"
+    __table_args__ = (
+        UniqueConstraint("ejercicio_id", "estudiante_id", name="uq_progresos_ejercicio_estudiante"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ejercicio_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ejercicios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    estudiante_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    respuestas = Column(JSONB, nullable=False, default=dict)
+    preguntas_completadas = Column(JSONB, nullable=False, default=list)
+    punto_actual = Column(Integer, nullable=False, default=0)
+    actualizado_en = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class RevisionEjercicio(Base):
+    """Marca de revisión docente independiente del progreso del estudiante."""
+    __tablename__ = "revisiones_ejercicios"
+    __table_args__ = (
+        UniqueConstraint("ejercicio_id", "estudiante_id", name="uq_revisiones_ejercicio_estudiante"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ejercicio_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ejercicios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    estudiante_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profesor_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revisado_en = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

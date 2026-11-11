@@ -14,6 +14,31 @@ export const MAX_TEXTO_SOLUCION = 5000
 
 export type ImagenEjercicio = { id: string; nombre: string; mime: string; tamano: number }
 export type ArchivoSolucion = { id: string; nombre: string; mime: string; tamano: number }
+export type ProgresoEjercicio = {
+  ejercicioId: string
+  respuestas: Record<string, unknown>
+  preguntasCompletadas: string[]
+  puntoActual: number
+  actualizadoEn: string
+}
+
+type ProgresoEjercicioAPI = {
+  ejercicio_id: string
+  respuestas: Record<string, unknown>
+  preguntas_completadas: string[]
+  punto_actual: number
+  actualizado_en: string
+}
+
+function aProgreso(p: ProgresoEjercicioAPI): ProgresoEjercicio {
+  return {
+    ejercicioId: p.ejercicio_id,
+    respuestas: p.respuestas,
+    preguntasCompletadas: p.preguntas_completadas,
+    puntoActual: p.punto_actual,
+    actualizadoEn: p.actualizado_en,
+  }
+}
 
 export type Solucion = {
   id: string
@@ -169,6 +194,30 @@ export async function entregarSolucion(ejercicioId: string, datos: { texto: stri
 export async function retirarSolucion(ejercicioId: string): Promise<void> {
   const res = await fetchAutenticado(`${API_URL}/ejercicios/${ejercicioId}/solucion`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await mensajeDeError(res))
+}
+
+export async function cargarProgresoEjercicio(ejercicioId: string): Promise<ProgresoEjercicio | null> {
+  const res = await fetchAutenticado(`${API_URL}/ejercicios/${ejercicioId}/progreso`)
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  const progreso = (await res.json()) as ProgresoEjercicioAPI | null
+  return progreso ? aProgreso(progreso) : null
+}
+
+export async function guardarProgresoEjercicio(
+  ejercicioId: string,
+  progreso: Pick<ProgresoEjercicio, 'respuestas' | 'preguntasCompletadas' | 'puntoActual'>,
+): Promise<ProgresoEjercicio> {
+  const res = await fetchAutenticado(`${API_URL}/ejercicios/${ejercicioId}/progreso`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      respuestas: progreso.respuestas,
+      preguntas_completadas: progreso.preguntasCompletadas,
+      punto_actual: progreso.puntoActual,
+    }),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  return aProgreso((await res.json()) as ProgresoEjercicioAPI)
 }
 
 // Solo quien gestiona el curso: todas las soluciones recibidas de un ejercicio.

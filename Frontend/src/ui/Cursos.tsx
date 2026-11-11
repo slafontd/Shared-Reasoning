@@ -9,6 +9,7 @@ import {
 import type { Usuario } from '../api/auth'
 import CursoDetalle from './CursoDetalle'
 import { EtiquetaCodigo, EtiquetaInscrito, fechaLegible } from './cursosComun'
+import ProgresoEstudiantes from './ProgresoEstudiantes'
 
 type Props = {
   usuario: Usuario | null
@@ -58,6 +59,7 @@ function Cursos({ usuario, onVolver }: Props) {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [recienCreado, setRecienCreado] = useState<Curso | null>(null)
   const [seleccionado, setSeleccionado] = useState<Curso | null>(null)
+  const [seguimientoAbierto, setSeguimientoAbierto] = useState(false)
   const [buscarCodigoAbierto, setBuscarCodigoAbierto] = useState(false)
   // «Mis cursos»: para el estudiante, aquellos en los que está inscrito; para
   // el profesor, los que creó. «Todos»: el catálogo completo (US09).
@@ -159,6 +161,14 @@ function Cursos({ usuario, onVolver }: Props) {
     )
   }
 
+  if (seguimientoAbierto && usuario?.rol === 'profesor') {
+    return (
+      <TemaProvider tema={tema}>
+        <ProgresoEstudiantes onVolver={() => setSeguimientoAbierto(false)} />
+      </TemaProvider>
+    )
+  }
+
   return (
     <TemaProvider tema={tema} className="min-h-screen" style={{ color: 'var(--ink)', background: 'linear-gradient(135deg,var(--bg1),var(--bg2))' }}>
       <header className="flex items-center gap-3 px-6 h-16 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -209,6 +219,15 @@ function Cursos({ usuario, onVolver }: Props) {
             >
               <Plus size={15} />
               Nuevo curso
+            </button>
+          )}
+          {usuario?.rol === 'profesor' && (
+            <button
+              onClick={() => setSeguimientoAbierto(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl panel text-sm font-medium hover:-translate-y-0.5 transition"
+            >
+              <GraduationCap size={15} />
+              Progreso de estudiantes
             </button>
           )}
         </div>

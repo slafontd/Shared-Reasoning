@@ -1,5 +1,4 @@
-"""Ejercicios de un curso — US17 eliminar ejercicio (#21), con imágenes en el
-enunciado y soluciones de los estudiantes.
+"""Ejercicios de un curso — con imágenes, progreso y soluciones de estudiantes.
 
 Permisos:
 - Crear y actualizar (US16) ejercicios y adjuntarles imágenes: SOLO el
@@ -7,6 +6,7 @@ Permisos:
 - Eliminar un ejercicio o sus imágenes: ese profesor, o un administrador
   (mismo criterio que eliminar un curso, US11).
 - Ver: además, los estudiantes inscritos en el curso (US13).
+- Guardar/recuperar progreso: solo el estudiante inscrito y dueño del borrador.
 - Entregar una solución: solo un estudiante inscrito. Ver las soluciones de un
   ejercicio: el profesor del curso (todas) o el propio estudiante (la suya).
 """
@@ -16,17 +16,19 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from archivos import leer_validado, nombre_seguro, tipo_de_imagen, tipo_de_imagen_o_pdf
 from auth import obtener_usuario_actual
 from cursos import esta_inscrito, gestiona_curso
 from db.database import get_db
-from db.models import Curso, Ejercicio, EjercicioImagen, Solucion, SolucionArchivo, Usuario
+from db.models import Curso, Ejercicio, EjercicioImagen, ProgresoEjercicio, Solucion, SolucionArchivo, Usuario
 from rate_limit import verificar_frecuencia
 from roles import ESTUDIANTE, PROFESOR
 from schemas.ejercicios import (
-    EjercicioActualizar, EjercicioCrear, EjercicioResponse, ImagenEjercicioResponse, SolucionResponse,
+    EjercicioActualizar, EjercicioCrear, EjercicioResponse, ImagenEjercicioResponse,
+    ProgresoEjercicioActualizar, ProgresoEjercicioResponse, SolucionResponse,
 )
 
 router = APIRouter(tags=["ejercicios"])
@@ -77,6 +79,11 @@ def _a_solucion_response(s: Solucion) -> SolucionResponse:
     )
 
 
+def _exigir_estudiante_inscrito(db: Session, usuario: Usuario, ejercicio: Ejercicio) -> None:
+    if usuario.rol != ESTUDIANTE or not esta_inscrito(db, usuario, ejercicio.curso_id):
+        raise HTTPException(status_code=403, detail="Solo los estudiantes inscritos en el curso pueden acceder a su progreso.")
+
+
 @router.get("/cursos/{curso_id}/ejercicios", response_model=list[EjercicioResponse])
 def listar_ejercicios(
     curso_id: UUID,
@@ -117,6 +124,90 @@ def listar_ejercicios(
             if r.id in propias:
                 r.mi_solucion = _a_solucion_response(propias[r.id])
     return respuestas
+
+
+@router.get(
+    "/ejercicios/{ejercicio_id}/progreso",
+    response_model=ProgresoEjercicioResponse | None,
+)
+def obtener_progreso(
+    ejercicio_id: UUID,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    ejercicio = db.get(Ejercicio, ejercicio_id)
+    if ejercicio is None:
+        raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
+    _exigir_estudiante_inscrito(db, usuario, ejercicio)
+    return (
+        db.query(ProgresoEjercicio)
+        .filter(
+            ProgresoEjercicio.ejercicio_id == ejercicio.id,
+            ProgresoEjercicio.estudiante_id == usuario.id,
+        )
+        .first()
+    )
+
+
+@router.put(
+    "/ejercicios/{ejercicio_id}/progreso",
+    response_model=ProgresoEjercicioResponse,
+)
+def guardar_progreso(
+    ejercicio_id: UUID,
+    datos: ProgresoEjercicioActualizar,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    verificar_frecuencia(f"user:{usuario.id}")
+    ejercicio = db.get(Ejercicio, ejercicio_id)
+    if ejercicio is None:
+        raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
+    _exigir_estudiante_inscrito(db, usuario, ejercicio)
+
+    progreso = (
+        db.query(ProgresoEjercicio)
+        .filter(
+            ProgresoEjercicio.ejercicio_id == ejercicio.id,
+            ProgresoEjercicio.estudiante_id == usuario.id,
+        )
+        .first()
+    )
+    if progreso is None:
+        progreso = ProgresoEjercicio(
+            ejercicio_id=ejercicio.id,
+            estudiante_id=usuario.id,
+            respuestas=datos.respuestas,
+            preguntas_completadas=datos.preguntas_completadas,
+            punto_actual=datos.punto_actual,
+        )
+        db.add(progreso)
+    else:
+        progreso.respuestas = datos.respuestas
+        progreso.preguntas_completadas = datos.preguntas_completadas
+        progreso.punto_actual = datos.punto_actual
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Dos guardados simultáneos pueden intentar crear el borrador a la vez.
+        progreso = (
+            db.query(ProgresoEjercicio)
+            .filter(
+                ProgresoEjercicio.ejercicio_id == ejercicio.id,
+                ProgresoEjercicio.estudiante_id == usuario.id,
+            )
+            .first()
+        )
+        if progreso is None:
+            raise
+        progreso.respuestas = datos.respuestas
+        progreso.preguntas_completadas = datos.preguntas_completadas
+        progreso.punto_actual = datos.punto_actual
+        db.commit()
+    db.refresh(progreso)
+    return progreso
 
 
 @router.post("/cursos/{curso_id}/ejercicios", response_model=EjercicioResponse, status_code=201)
@@ -270,8 +361,7 @@ async def entregar_solucion(
     ejercicio = db.get(Ejercicio, ejercicio_id)
     if ejercicio is None:
         raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
-    if usuario.rol != ESTUDIANTE or not esta_inscrito(db, usuario, ejercicio.curso_id):
-        raise HTTPException(status_code=403, detail="Solo los estudiantes inscritos en el curso pueden entregar soluciones.")
+    _exigir_estudiante_inscrito(db, usuario, ejercicio)
 
     texto = (texto or "").strip() or None
     if texto and len(texto) > MAX_TEXTO_SOLUCION:
@@ -301,6 +391,10 @@ async def entregar_solucion(
         SolucionArchivo(nombre=nombre_seguro(a.filename), mime=mime, tamano=len(contenido), datos=contenido)
         for a, (contenido, mime) in zip(archivos, validados)
     ]
+    db.query(ProgresoEjercicio).filter(
+        ProgresoEjercicio.ejercicio_id == ejercicio.id,
+        ProgresoEjercicio.estudiante_id == usuario.id,
+    ).delete(synchronize_session=False)
     db.commit()
     db.refresh(solucion)
     return _a_solucion_response(solucion)
