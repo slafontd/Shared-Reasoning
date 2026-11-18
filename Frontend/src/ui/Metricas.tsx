@@ -6,6 +6,7 @@ import {
   obtenerResumenMetricas, obtenerMetricasProfesores, obtenerMetricasCursos, obtenerDetalleMetricasCurso,
   type ResumenMetricas, type MetricasProfesor, type MetricasCurso, type DetalleMetricasCurso,
 } from '../api/metricas'
+import UsoPlataformaVista from './UsoPlataforma'
 
 type Props = {
   esAdmin: boolean
@@ -93,6 +94,9 @@ function Metricas({ esAdmin, onVolver }: Props) {
                 <Indicador etiqueta="Con feedback" valor={`${resumen.tasa_feedback}%`} detalle={`${resumen.con_feedback} de ${resumen.entregas} entregas`} />
               </div>
             </section>
+
+            {/* US30: frecuencia de uso e interacciones (solo admin) */}
+            {esAdmin && <UsoPlataformaVista />}
 
             {/* US27: por profesor (solo admin; un profesor ya ve lo suyo arriba) */}
             {esAdmin && (

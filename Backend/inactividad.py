@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from actividad import ACTIVIDAD, INICIO_SESION, registrar_evento
 from db.models import Usuario
 from roles import ADMINISTRADOR
 
@@ -73,6 +74,9 @@ def registrar_acceso(db: Session, usuario: Usuario, forzar: bool = False) -> Non
     if forzar or ultimo is None or momento - ultimo >= _INTERVALO_REGISTRO:
         usuario.ultimo_acceso = momento
         db.commit()
+        # US30: el login deja un «inicio_sesion»; el uso normal, un «actividad»
+        # (ya limitado a 1/hora por el chequeo de arriba).
+        registrar_evento(usuario.id, INICIO_SESION if forzar else ACTIVIDAD)
 
 
 def desactivar_inactivos(db: Session) -> list[Usuario]:

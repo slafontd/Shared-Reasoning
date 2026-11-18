@@ -19,6 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from actividad import ENTREGA, EJERCICIO_CREADO, FEEDBACK, registrar_evento
 from archivos import leer_validado, nombre_seguro, tipo_de_imagen, tipo_de_imagen_o_pdf
 from auth import obtener_usuario_actual
 from cursos import esta_inscrito, gestiona_curso
@@ -227,6 +228,7 @@ def crear_ejercicio(
     db.add(ejercicio)
     db.commit()
     db.refresh(ejercicio)
+    registrar_evento(usuario.id, EJERCICIO_CREADO)
     respuesta = EjercicioResponse.model_validate(ejercicio)
     respuesta.total_soluciones = 0
     return respuesta
@@ -403,6 +405,7 @@ async def entregar_solucion(
     ).delete(synchronize_session=False)
     db.commit()
     db.refresh(solucion)
+    registrar_evento(usuario.id, ENTREGA)
     return _a_solucion_response(solucion)
 
 
@@ -477,6 +480,7 @@ def actualizar_feedback_solucion(
     solucion.feedback_actualizado_en = func.now()
     db.commit()
     db.refresh(solucion)
+    registrar_evento(usuario.id, FEEDBACK)
     return _a_solucion_response(solucion)
 
 

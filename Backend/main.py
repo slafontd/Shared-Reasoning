@@ -17,9 +17,11 @@ from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
 import cursos
+from actividad import CHAT, CIRCUITO, MATERIAL, RETO, registrar_evento
 from inactividad import MENSAJE_DESACTIVADA, desactivar_por_inactividad, esta_inactivo, registrar_acceso
 import ejercicios
 import metricas_estudiante
+import metricas_uso
 import metricas_plataforma
 import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
@@ -97,6 +99,7 @@ app.include_router(cursos.router)
 app.include_router(ejercicios.router)
 app.include_router(metricas_plataforma.router)
 app.include_router(metricas_estudiante.router)
+app.include_router(metricas_uso.router)
 app.include_router(admin.router)
 
 
@@ -558,6 +561,7 @@ def crear_sesion(
     db.add(sesion)
     db.commit()
     db.refresh(sesion)
+    registrar_evento(usuario.id, CIRCUITO)
     return SesionCreada(sesion_id=str(sesion.id))
 
 
@@ -1038,6 +1042,7 @@ def _persistir_interaccion_chat(db, sesion, historial_list, resultado, tipo_inte
             contenido=historial_list[-1].get("contenido", ""),
             modo_detectado=tipo_interaccion,
         ))
+        registrar_evento(sesion.usuario_id, CHAT)
 
     respuesta = resultado.get("respuesta", "")
     if respuesta:
@@ -1315,6 +1320,7 @@ async def subir_material(
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
+    registrar_evento(usuario.id, MATERIAL)
 
     return _material_response(nuevo)
 
@@ -1422,6 +1428,8 @@ async def tutorial_chat(
 @app.get("/retos/diario", response_model=RetoDiario)
 async def reto_diario(usuario: Usuario = Depends(obtener_usuario_actual)):
     try:
-        return await retos.generar_reto_diario(usuario.nivel)
+        reto = await retos.generar_reto_diario(usuario.nivel)
+        registrar_evento(usuario.id, RETO)
+        return reto
     except Exception:
         raise HTTPException(status_code=502, detail="No se pudo generar el reto diario. Intenta de nuevo.")

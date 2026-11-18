@@ -12,6 +12,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from actividad import CURSO_CREADO, INSCRIPCION, registrar_evento
 from auth import obtener_usuario_actual, requerir_rol
 from codigos_curso import normalizar_codigo, nuevo_codigo_unico
 from db.database import get_db
@@ -96,6 +97,7 @@ def crear_curso(
     db.add(curso)
     db.commit()
     db.refresh(curso)
+    registrar_evento(usuario.id, CURSO_CREADO)
     return a_respuesta(curso, usuario)
 
 
@@ -179,6 +181,7 @@ def inscribirse(
         # Doble clic / dos pestañas: la restricción única de la BD es la garantía final.
         db.rollback()
         raise HTTPException(status_code=409, detail="Ya estás inscrito en este curso.")
+    registrar_evento(usuario.id, INSCRIPCION)
     return a_respuesta(curso, usuario, inscrito=True)
 
 

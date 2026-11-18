@@ -370,3 +370,24 @@ class RevisionEjercicio(Base):
         nullable=False,
     )
     revisado_en = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class EventoActividad(Base):
+    """Registro de actividad e interacciones de los usuarios (US30). Una fila
+    por hecho relevante —iniciar sesión, usar la app, armar un circuito,
+    preguntarle al asistente, entregar un ejercicio…— para que un
+    administrador analice la frecuencia de uso (ver actividad.py y
+    metricas_uso.py). No guarda contenido (ni mensajes ni archivos): solo
+    quién, qué tipo de hecho y cuándo. Si se borra el usuario, sus eventos se
+    van con él."""
+    __tablename__ = "eventos_actividad"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tipo = Column(String(30), nullable=False)
+    fecha = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
