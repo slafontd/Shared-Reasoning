@@ -5,7 +5,9 @@ import {
   actualizarRevisionEjercicio, obtenerDetalleProgreso, obtenerProgresoCurso,
   type CursoProgreso, type DetalleProgresoEstudiante, type EjercicioProgresoDetalle,
 } from '../api/seguimiento'
+import { obtenerMetricasEstudiante, type MetricasEstudiante } from '../api/metricasEstudiante'
 import { LogoWordmark } from './Logo'
+import FichaEstudiante from './FichaEstudiante'
 import { fechaLegible } from './cursosComun'
 
 type Props = { onVolver: () => void }
@@ -48,6 +50,8 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
   const [cursoId, setCursoId] = useState('')
   const [resumen, setResumen] = useState<CursoProgreso | null>(null)
   const [estudiante, setEstudiante] = useState<DetalleProgresoEstudiante | null>(null)
+  // Ficha del estudiante seleccionado: datos, progreso global y actividad.
+  const [metricas, setMetricas] = useState<MetricasEstudiante | null>(null)
   const [cargandoCursos, setCargandoCursos] = useState(true)
   const [cargandoResumen, setCargandoResumen] = useState(false)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
@@ -83,8 +87,14 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
   async function seleccionarEstudiante(estudianteId: string) {
     setError(null)
     setCargandoDetalle(true)
+    setMetricas(null)
     try {
-      setEstudiante(await obtenerDetalleProgreso(cursoId, estudianteId))
+      const [detalle, ficha] = await Promise.all([
+        obtenerDetalleProgreso(cursoId, estudianteId),
+        obtenerMetricasEstudiante(estudianteId),
+      ])
+      setEstudiante(detalle)
+      setMetricas(ficha)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el detalle del estudiante.')
     } finally {
@@ -103,7 +113,12 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
         ejercicio.ejercicioId,
         !ejercicio.revisado,
       )
-      setEstudiante(await obtenerDetalleProgreso(estudiante.cursoId, estudiante.estudianteId))
+      const [detalle, ficha] = await Promise.all([
+        obtenerDetalleProgreso(estudiante.cursoId, estudiante.estudianteId),
+        obtenerMetricasEstudiante(estudiante.estudianteId),
+      ])
+      setEstudiante(detalle)
+      setMetricas(ficha)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar la revisión.')
     } finally {
@@ -139,6 +154,7 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
               onChange={(event) => {
                 setResumen(null)
                 setEstudiante(null)
+                setMetricas(null)
                 setCargandoResumen(true)
                 setError(null)
                 setCursoId(event.target.value)
@@ -172,7 +188,7 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
           </div>
         ) : estudiante ? (
           <section className="space-y-4">
-            <button onClick={() => setEstudiante(null)} className="flex items-center gap-1.5 text-sm hover:underline" style={{ color: 'var(--accent)' }}>
+            <button onClick={() => { setEstudiante(null); setMetricas(null) }} className="flex items-center gap-1.5 text-sm hover:underline" style={{ color: 'var(--accent)' }}>
               <ArrowLeft size={15} /> Seguimiento individual
             </button>
             {cargandoDetalle ? (
@@ -180,11 +196,14 @@ export default function ProgresoEstudiantes({ onVolver }: Props) {
                 <Loader2 size={16} className="animate-spin" /> Cargando detalle…
               </p>
             ) : (
-              <DetalleEstudiante
-                estudiante={estudiante}
-                alCambiarRevision={cambiarRevision}
-                actualizandoRevision={actualizandoRevision}
-              />
+              <>
+                {metricas && <FichaEstudiante metricas={metricas} />}
+                <DetalleEstudiante
+                  estudiante={estudiante}
+                  alCambiarRevision={cambiarRevision}
+                  actualizandoRevision={actualizandoRevision}
+                />
+              </>
             )}
           </section>
         ) : (
