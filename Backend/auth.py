@@ -60,10 +60,29 @@ ADMIN_EMAILS = {
     if e.strip()
 }
 
+# Correos personales autorizados como excepción al dominio institucional.
+EMAILS_EXTERNOS_PERMITIDOS = {
+    e.strip().lower()
+    for e in os.getenv("EMAILS_EXTERNOS_PERMITIDOS", "").split(",")
+    if e.strip()
+}
+
 
 def es_email_admin(email: str) -> bool:
     return email.strip().lower() in ADMIN_EMAILS
 
+
+def es_correo_institucional(email: str) -> bool:
+    email = email.strip().lower()
+
+    # Permitir el Gmail autorizado como excepción.
+    if email in EMAILS_EXTERNOS_PERMITIDOS:
+        return True
+
+    # Permitir los dominios institucionales.
+    dominio = email.rsplit("@", 1)[-1]
+    return any(dominio == d.lower() for d in DOMINIOS_INSTITUCIONALES)
+print("PRUEBA DE VALIDACIÓN:", es_correo_institucional("omegasantiagox@gmail.com"))
 
 def rol_inicial(email: str) -> str:
     """Rol con el que arranca una cuenta que se autoregistra (nunca una
@@ -76,9 +95,6 @@ def rol_inicial(email: str) -> str:
 
 # --- Esquemas de request/response ---
 
-def es_correo_institucional(email: str) -> bool:
-    dominio = email.rsplit("@", 1)[-1].lower()
-    return any(dominio == d.lower() for d in DOMINIOS_INSTITUCIONALES)
 
 
 def validar_correo_institucional(email):
