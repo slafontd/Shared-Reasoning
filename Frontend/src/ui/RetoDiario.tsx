@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Sun, Moon, Loader2, CheckCircle2, XCircle, Trophy } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Loader2, CheckCircle2, XCircle, Trophy, Flame } from 'lucide-react'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
-import { obtenerRetoDiario, type RetoDiario as RetoDiarioType, type PreguntaReto } from '../api/retos'
+import { obtenerRetoDiario, completarRetoDiario, obtenerRacha, type RetoDiario as RetoDiarioType, type PreguntaReto, type Racha } from '../api/retos'
 
 type Props = { onVolver: () => void }
 
@@ -26,13 +26,34 @@ function RetoDiario({ onVolver }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [respuestas, setRespuestas] = useState<Record<number, Respuesta>>({})
   const [enviado, setEnviado] = useState(false)
+  // Racha tras completar hoy (o la actual, si el reto de hoy ya estaba hecho).
+  const [racha, setRacha] = useState<Racha | null>(null)
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null)
 
   useEffect(() => {
     obtenerRetoDiario()
-      .then(setReto)
+      .then((r) => {
+        setReto(r)
+        if (r.completado) obtenerRacha().then(setRacha).catch(() => undefined)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo generar el reto.'))
       .finally(() => setCargando(false))
   }, [])
+
+  // Califica en el navegador (el reto ya trae las respuestas) y guarda el
+  // resultado: es lo que cuenta para la racha. Si el guardado falla, igual se
+  // muestran las notas.
+  async function enviar() {
+    if (!reto) return
+    const nota = reto.preguntas.filter((p, i) => esCorrecta(p, i)).length
+    setEnviado(true)
+    setErrorGuardado(null)
+    try {
+      setRacha(await completarRetoDiario(nota))
+    } catch (e) {
+      setErrorGuardado(e instanceof Error ? e.message : 'No se pudo guardar tu resultado.')
+    }
+  }
 
   const todasRespondidas = useMemo(() => {
     if (!reto) return false
@@ -50,8 +71,8 @@ function RetoDiario({ onVolver }: Props) {
     return p.pares.every((par, idx) => (r as Record<number, string>)[idx] === par.definicion)
   }
 
-  const aciertos = reto && enviado ? reto.preguntas.filter((p, i) => esCorrecta(p, i)).length : 0
-  const xpGanado = reto ? Math.round((aciertos / reto.preguntas.length) * reto.xpRecompensa) : 0
+  const aciertos = reto && enviado ? reto.preguntas.filter((p, i) => esCorrecta(p, i)).length : (reto?.aciertos ?? 0)
+  const xpGanado = reto?.completado && !enviado ? (reto.xpGanado ?? 0) : reto ? Math.round((aciertos / reto.preguntas.length) * reto.xpRecompensa) : 0
 
   return (
     <TemaProvider tema={tema} className="min-h-screen flex flex-col" style={{ color: 'var(--ink)', background: 'linear-gradient(135deg,var(--bg1),var(--bg2))' }}>
@@ -87,17 +108,33 @@ function RetoDiario({ onVolver }: Props) {
               <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>{reto.descripcion}</p>
             </div>
 
-            {enviado && (
-              <div className="panel rounded-2xl p-5 flex items-center gap-4 anim-fade-in-slow">
-                <Trophy size={28} style={{ color: 'var(--accent)' }} />
-                <div>
-                  <p className="text-sm font-semibold">{aciertos} de {reto.preguntas.length} correctas</p>
-                  <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>+{xpGanado} XP de {reto.xpRecompensa} posibles</p>
+            {(enviado || reto.completado) && (
+              <div className="panel rounded-2xl p-5 space-y-3 anim-fade-in-slow">
+                <div className="flex items-center gap-4">
+                  <Trophy size={28} style={{ color: 'var(--accent)' }} />
+                  <div>
+                    {reto.completado && !enviado && <p className="text-sm font-semibold">Ya completaste el reto de hoy</p>}
+                    <p className={reto.completado && !enviado ? 'text-xs' : 'text-sm font-semibold'}>{aciertos} de {reto.preguntas.length} correctas</p>
+                    <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>+{xpGanado} XP de {reto.xpRecompensa} posibles</p>
+                  </div>
                 </div>
+                {racha && (
+                  <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: 'rgba(249,115,22,.12)' }} role="status">
+                    <Flame size={20} style={{ color: '#f97316' }} />
+                    <p className="text-sm">
+                      <span className="font-semibold tabular-nums">{racha.rachaActual}</span> {racha.rachaActual === 1 ? 'día' : 'días'} de racha
+                      <span className="text-xs" style={{ color: 'var(--ink-soft)' }}> · mejor: {racha.mejorRacha}</span>
+                    </p>
+                  </div>
+                )}
+                {errorGuardado && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{errorGuardado} Tu racha no se actualizó.</p>}
+                {reto.completado && !enviado && (
+                  <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Vuelve mañana para un reto nuevo y seguir sumando días de racha.</p>
+                )}
               </div>
             )}
 
-            {reto.preguntas.map((p, i) => (
+            {!reto.completado && reto.preguntas.map((p, i) => (
               <PreguntaCard
                 key={i}
                 indice={i}
@@ -109,9 +146,9 @@ function RetoDiario({ onVolver }: Props) {
               />
             ))}
 
-            {!enviado && (
+            {!enviado && !reto.completado && (
               <button
-                onClick={() => setEnviado(true)}
+                onClick={enviar}
                 disabled={!todasRespondidas}
                 className="w-full px-5 py-2.5 rounded-xl accent-bg text-white text-sm font-medium shadow-lg hover:brightness-110 disabled:opacity-40 transition"
               >

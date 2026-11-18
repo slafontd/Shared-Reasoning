@@ -18,6 +18,7 @@ from urllib.parse import quote
 import httpx
 from dotenv import load_dotenv
 
+from archivos import nombre_seguro, tipo_de_imagen_o_pdf
 from providers.catalogo import crear_provider_razonamiento
 from schemas.materiales import TutorialComponente
 
@@ -29,6 +30,57 @@ BUCKET = "materiales-biblioteca"
 
 CATEGORIAS_VALIDAS = {"libro", "pdf", "guia", "datasheet"}
 DIFICULTADES_VALIDAS = {"basico", "intermedio", "experto", "referencia"}
+
+
+# Tipos que se pueden subir (extensión → tipo real). El contenido se comprueba
+# contra la extensión (validar_material): no se confía en lo que declara el
+# cliente. Sin SVG/HTML/ejecutables a propósito: servidos desde nuestro
+# dominio podrían llevar scripts.
+TIPOS_PERMITIDOS = {
+    ".pdf": "application/pdf",
+    ".epub": "application/epub+zip",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+MAX_BYTES_MATERIAL = 20 * 1024 * 1024
+_ZIP = bytes([0x50, 0x4B, 0x03, 0x04])
+_OLE = bytes([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
+
+
+def _coincide_con_extension(extension: str, contenido: bytes) -> bool:
+    if extension in (".pdf", ".png", ".jpg", ".jpeg"):
+        real = tipo_de_imagen_o_pdf(contenido)
+        return real == TIPOS_PERMITIDOS[extension]
+    if extension in (".docx", ".pptx", ".xlsx", ".epub"):
+        return contenido.startswith(_ZIP)
+    if extension in (".doc", ".ppt", ".xls"):
+        return contenido.startswith(_OLE)
+    return b"\x00" not in contenido[:8192]  # .txt/.md/.csv: texto, no binario
+
+
+def validar_material(nombre: str | None, contenido: bytes) -> tuple[str, str]:
+    """Devuelve (extensión, tipo) o lanza ValueError con un mensaje para el usuario."""
+    extension = os.path.splitext(nombre_seguro(nombre))[1].lower()
+    if extension not in TIPOS_PERMITIDOS:
+        permitidas = ", ".join(sorted(e.lstrip(".") for e in TIPOS_PERMITIDOS))
+        raise ValueError(f"Tipo de archivo no permitido. Puedes subir: {permitidas}.")
+    if not contenido:
+        raise ValueError("El archivo está vacío.")
+    if len(contenido) > MAX_BYTES_MATERIAL:
+        raise ValueError(f"El archivo supera el límite de {MAX_BYTES_MATERIAL // (1024 * 1024)} MB.")
+    if not _coincide_con_extension(extension, contenido):
+        raise ValueError(f"El contenido del archivo no corresponde a un «{extension}» válido.")
+    return extension, TIPOS_PERMITIDOS[extension]
 
 
 def storage_configurado() -> bool:

@@ -17,6 +17,8 @@ export type Material = {
   // Absoluta pero SÍ requiere Authorization — nunca usar en un <a href>
   // directo, ver descargarMaterial().
   descargaUrl: string
+  // Nombre original con extensión (para guardar el archivo con su nombre).
+  nombreArchivo: string | null
   subidoPor: string
   fechaSubida: string
 }
@@ -28,6 +30,7 @@ type MaterialAPI = {
   dificultad: Dificultad
   portada_url: string | null
   descarga_url: string
+  nombre_archivo?: string | null
   subido_por: string
   fecha_subida: string
 }
@@ -40,6 +43,7 @@ function aMaterial(m: MaterialAPI): Material {
     dificultad: m.dificultad,
     portadaUrl: m.portada_url ? `${API_URL}${m.portada_url}` : null,
     descargaUrl: `${API_URL}${m.descarga_url}`,
+    nombreArchivo: m.nombre_archivo ?? null,
     subidoPor: m.subido_por,
     fechaSubida: m.fecha_subida,
   }
@@ -57,6 +61,27 @@ export async function listarMateriales(filtros?: { categoria?: Categoria; dificu
   return data.map(aMaterial)
 }
 
+// Mismos tipos y tope que el backend (materiales.TIPOS_PERMITIDOS): el
+// servidor los vuelve a validar mirando el contenido real del archivo; esto
+// solo avisa antes de subir.
+export const EXTENSIONES_MATERIAL = ['pdf', 'epub', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'csv', 'png', 'jpg', 'jpeg']
+export const ACCEPT_MATERIAL = EXTENSIONES_MATERIAL.map((e) => `.${e}`).join(',')
+export const MAX_BYTES_MATERIAL = 20 * 1024 * 1024
+export const TIPOS_MATERIAL_TEXTO = 'PDF, EPUB, Word, PowerPoint, Excel, TXT, MD, CSV, PNG o JPG (máx. 20 MB)'
+
+export function validarArchivoMaterial(archivo: File): string | null {
+  const extension = archivo.name.includes('.') ? archivo.name.split('.').pop()!.toLowerCase() : ''
+  if (!EXTENSIONES_MATERIAL.includes(extension)) return `Tipo no permitido. Puedes subir: ${TIPOS_MATERIAL_TEXTO}.`
+  if (archivo.size === 0) return 'El archivo está vacío.'
+  if (archivo.size > MAX_BYTES_MATERIAL) return 'El archivo supera el límite de 20 MB.'
+  return null
+}
+
+async function mensajeDeError(res: Response, porDefecto: string): Promise<string> {
+  const data = await res.json().catch(() => null)
+  return typeof data?.detail === 'string' ? data.detail : porDefecto
+}
+
 export async function subirMaterial(datos: {
   titulo: string
   categoria: Categoria
@@ -70,7 +95,7 @@ export async function subirMaterial(datos: {
   form.set('archivo', datos.archivo)
 
   const res = await fetchAutenticado(`${API_URL}/materiales/subir`, { method: 'POST', body: form })
-  if (!res.ok) throw new Error('No se pudo subir el material.')
+  if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo subir el material.'))
   return aMaterial(await res.json())
 }
 
@@ -83,9 +108,9 @@ export async function descargarMaterial(material: Material): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = material.titulo
+  a.download = material.nombreArchivo ?? material.titulo
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 export async function eliminarMaterial(id: string): Promise<void> {

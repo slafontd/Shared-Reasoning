@@ -8,6 +8,7 @@ import { LogoWordmark } from './Logo'
 import type { Usuario } from '../api/auth'
 import {
   listarMateriales, subirMaterial, descargarMaterial, eliminarMaterial,
+  ACCEPT_MATERIAL, TIPOS_MATERIAL_TEXTO, validarArchivoMaterial,
   obtenerTutorial, preguntarTutorial,
   type Material, type Categoria, type Dificultad, type Tutorial,
 } from '../api/materiales'
@@ -307,11 +308,22 @@ function ModalSubirMaterial({ onCerrar, onSubido }: { onCerrar: () => void; onSu
           style={{ background: 'var(--bg1)', border: '1px dashed var(--border)', color: archivo ? 'var(--ink)' : 'var(--ink-soft)' }}
         >
           <FileText size={15} />
-          {archivo ? archivo.name : 'Elegir archivo (PDF u otro)'}
-          <input type="file" className="hidden" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+          <span className="truncate">{archivo ? archivo.name : 'Elegir archivo'}</span>
+          <input
+            type="file"
+            accept={ACCEPT_MATERIAL}
+            className="hidden"
+            onChange={(e) => {
+              const elegido = e.target.files?.[0] ?? null
+              setError(elegido ? validarArchivoMaterial(elegido) : null)
+              setArchivo(elegido && !validarArchivoMaterial(elegido) ? elegido : null)
+              e.target.value = ''
+            }}
+          />
         </label>
+        <p className="text-[11px]" style={{ color: 'var(--ink-soft)' }}>{TIPOS_MATERIAL_TEXTO}</p>
 
-        {error && <p className="text-xs" style={{ color: '#fca5a5' }}>{error}</p>}
+        {error && <p role="alert" className="text-xs" style={{ color: '#dc2626' }}>{error}</p>}
 
         <button
           onClick={enviar}

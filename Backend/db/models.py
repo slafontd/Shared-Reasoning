@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, UniqueConstraint, LargeBinary, Integer
+from sqlalchemy import Column, String, DateTime, Date, Text, ForeignKey, Boolean, UniqueConstraint, LargeBinary, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, deferred
 from sqlalchemy.sql import func
@@ -116,6 +116,16 @@ class MaterialBiblioteca(Base):
         index=True,
     )
     fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
+    # Cuando Supabase Storage no está configurado, el archivo (y su portada)
+    # se guardan aquí, en la propia base — igual que las imágenes de los
+    # ejercicios. `deferred`: listar materiales nunca trae los bytes. En ese
+    # caso ruta_archivo/ruta_portada son solo marcadores ("db/<id>.<ext>").
+    # Si hay Storage, estas columnas quedan en NULL y manda la ruta del bucket.
+    datos = deferred(Column(LargeBinary, nullable=True))
+    portada_datos = deferred(Column(LargeBinary, nullable=True))
+    mime = Column(String(100), nullable=True)
+    nombre_archivo = Column(String(255), nullable=True)
+    tamano = Column(Integer, nullable=True)
 
 
 class ChatMensaje(Base):
@@ -391,3 +401,26 @@ class EventoActividad(Base):
     )
     tipo = Column(String(30), nullable=False)
     fecha = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
+class RetoDiarioUsuario(Base):
+    """El reto diario de un usuario para un día (ver retos.py). Se genera una
+    sola vez al día —reabrir la pantalla devuelve el mismo reto— y guarda cómo
+    le fue, para calcular la racha de días seguidos. `fecha` es el día local
+    (ZONA_HORARIA), no UTC."""
+    __tablename__ = "retos_diarios"
+    __table_args__ = (UniqueConstraint("usuario_id", "fecha", name="uq_retos_diarios_usuario_fecha"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha = Column(Date, nullable=False)
+    reto = Column(JSONB, nullable=False)
+    # NULL = todavía no lo completa.
+    completado_en = Column(DateTime(timezone=True), nullable=True)
+    aciertos = Column(Integer, nullable=True)
+    xp_ganado = Column(Integer, nullable=True)

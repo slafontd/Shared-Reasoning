@@ -28,6 +28,8 @@ class MaterialResponse(BaseModel):
     # usarse directo como src/href en el frontend — ver materiales.py.
     portada_url: str | None = None
     descarga_url: str
+    # Nombre original del archivo (con extensión), para guardarlo con su nombre.
+    nombre_archivo: str | None = None
     subido_por: UUID
     fecha_subida: datetime
 

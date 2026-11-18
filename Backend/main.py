@@ -16,8 +16,9 @@ from db.database import get_db
 from db.models import Usuario, Sesion, ChatMensaje, MaterialBiblioteca
 import materiales
 import retos
+from archivos import nombre_seguro
 import cursos
-from actividad import CHAT, CIRCUITO, MATERIAL, RETO, registrar_evento
+from actividad import CHAT, CIRCUITO, MATERIAL, registrar_evento
 from inactividad import MENSAJE_DESACTIVADA, desactivar_por_inactividad, esta_inactivo, registrar_acceso
 import ejercicios
 import metricas_estudiante
@@ -25,7 +26,6 @@ import metricas_uso
 import metricas_plataforma
 import admin
 from schemas.materiales import MaterialResponse, TutorialComponente, TutorialChatRequest
-from schemas.retos import RetoDiario
 from auth import (
     RegistroRequest,
     LoginRequest,
@@ -68,6 +68,7 @@ from datetime import datetime
 import asyncio
 import json
 import os
+from urllib.parse import quote
 import secrets
 import uuid
 from dotenv import load_dotenv
@@ -136,6 +137,7 @@ app.include_router(ejercicios.router)
 app.include_router(metricas_plataforma.router)
 app.include_router(metricas_estudiante.router)
 app.include_router(metricas_uso.router)
+app.include_router(retos.router)
 app.include_router(admin.router)
 
 
@@ -1292,9 +1294,19 @@ def _material_response(m: MaterialBiblioteca) -> MaterialResponse:
         dificultad=m.dificultad,
         portada_url=f"/materiales/portadas/{m.id}" if m.ruta_portada else None,
         descarga_url=f"/materiales/descargar/{m.id}",
+        nombre_archivo=_nombre_descarga(m),
         subido_por=m.subido_por,
         fecha_subida=m.fecha_subida,
     )
+
+
+def _guardado_en_bd(m: MaterialBiblioteca) -> bool:
+    """True si el archivo vive en la base (ruta marcada "db/...") y no en Supabase Storage."""
+    return m.ruta_archivo.startswith("db/")
+
+
+def _nombre_descarga(m: MaterialBiblioteca) -> str:
+    return m.nombre_archivo or f"{m.titulo}{os.path.splitext(m.ruta_archivo)[1]}"
 
 
 def _buscar_material(db: Session, material_id: str) -> MaterialBiblioteca | None:
@@ -1316,11 +1328,6 @@ async def subir_material(
     usuario: Usuario = Depends(obtener_usuario_actual),
     db: Session = Depends(get_db),
 ):
-    if not materiales.storage_configurado():
-        raise HTTPException(
-            status_code=503,
-            detail="La biblioteca de materiales no está configurada en este servidor (falta SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY).",
-        )
     if categoria not in materiales.CATEGORIAS_VALIDAS:
         raise HTTPException(
             status_code=400,
@@ -1332,34 +1339,44 @@ async def subir_material(
             detail=f"Dificultad '{dificultad}' no válida. Valores válidos: {sorted(materiales.DIFICULTADES_VALIDAS)}",
         )
 
-    contenido = await archivo.read()
-    if len(contenido) == 0:
-        raise HTTPException(status_code=400, detail="El archivo está vacío.")
-    if len(contenido) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="El archivo supera el límite de 20MB.")
+    titulo = titulo.strip()
+    if not titulo or len(titulo) > 200:
+        raise HTTPException(status_code=400, detail="El título es obligatorio y admite hasta 200 caracteres.")
+
+    # Se lee un byte de más para detectar el exceso sin cargar archivos enormes.
+    contenido = await archivo.read(materiales.MAX_BYTES_MATERIAL + 1)
+    if len(contenido) > materiales.MAX_BYTES_MATERIAL:
+        raise HTTPException(status_code=413, detail=f"El archivo supera el límite de {materiales.MAX_BYTES_MATERIAL // (1024 * 1024)} MB.")
+    try:
+        extension, mime = materiales.validar_material(archivo.filename, contenido)
+    except ValueError as e:
+        raise HTTPException(status_code=415 if "no permitido" in str(e) else 400, detail=str(e))
 
     material_id = uuid.uuid4()
-    extension = os.path.splitext(archivo.filename or "")[1].lower() or ".bin"
-    ruta_archivo = f"archivos/{material_id}{extension}"
-    content_type = archivo.content_type or "application/octet-stream"
-
-    try:
-        await materiales.subir_archivo(ruta_archivo, contenido, content_type)
-    except Exception:
-        raise HTTPException(status_code=502, detail="No se pudo subir el archivo al almacenamiento. Intenta de nuevo.")
-
     # Portada auto-generada solo para PDFs; si falla no es fatal, el front cae
     # a un ícono genérico por categoría (ver MaterialResponse.portada_url).
-    ruta_portada = None
-    if extension == ".pdf":
-        portada_bytes = materiales.generar_portada_pdf(contenido)
+    portada_bytes = materiales.generar_portada_pdf(contenido) if extension == ".pdf" else None
+
+    datos_bd = portada_bd = None
+    if materiales.storage_configurado():
+        ruta_archivo = f"archivos/{material_id}{extension}"
+        try:
+            await materiales.subir_archivo(ruta_archivo, contenido, mime)
+        except Exception:
+            raise HTTPException(status_code=502, detail="No se pudo subir el archivo al almacenamiento. Intenta de nuevo.")
+        ruta_portada = None
         if portada_bytes:
-            ruta_portada_candidata = f"portadas/{material_id}.png"
+            candidata = f"portadas/{material_id}.png"
             try:
-                await materiales.subir_archivo(ruta_portada_candidata, portada_bytes, "image/png")
-                ruta_portada = ruta_portada_candidata
+                await materiales.subir_archivo(candidata, portada_bytes, "image/png")
+                ruta_portada = candidata
             except Exception:
                 ruta_portada = None
+    else:
+        # Sin Supabase Storage configurado: el archivo se guarda en la base.
+        ruta_archivo = f"db/{material_id}{extension}"
+        ruta_portada = f"db/{material_id}.png" if portada_bytes else None
+        datos_bd, portada_bd = contenido, portada_bytes
 
     nuevo = MaterialBiblioteca(
         id=material_id,
@@ -1369,6 +1386,11 @@ async def subir_material(
         ruta_archivo=ruta_archivo,
         ruta_portada=ruta_portada,
         subido_por=usuario.id,
+        mime=mime,
+        nombre_archivo=nombre_seguro(archivo.filename),
+        tamano=len(contenido),
+        datos=datos_bd,
+        portada_datos=portada_bd,
     )
     db.add(nuevo)
     db.commit()
@@ -1405,7 +1427,12 @@ async def portada_material(material_id: str, db: Session = Depends(get_db)):
     if material is None or not material.ruta_portada:
         raise HTTPException(status_code=404, detail="Portada no encontrada.")
 
-    contenido = await materiales.descargar_archivo(material.ruta_portada)
+    if _guardado_en_bd(material):
+        contenido = material.portada_datos
+        if contenido is None:
+            raise HTTPException(status_code=404, detail="Portada no encontrada.")
+    else:
+        contenido = await materiales.descargar_archivo(material.ruta_portada)
     return Response(content=contenido, media_type="image/png")
 
 
@@ -1419,14 +1446,24 @@ async def descargar_material(
     if material is None:
         raise HTTPException(status_code=404, detail="Material no encontrado.")
 
-    contenido = await materiales.descargar_archivo(material.ruta_archivo)
-    extension = os.path.splitext(material.ruta_archivo)[1]
-    media_type = "application/pdf" if extension == ".pdf" else "application/octet-stream"
+    if _guardado_en_bd(material):
+        contenido = material.datos
+        if contenido is None:
+            raise HTTPException(status_code=404, detail="Material no encontrado.")
+    else:
+        contenido = await materiales.descargar_archivo(material.ruta_archivo)
+    extension = os.path.splitext(material.ruta_archivo)[1].lower()
+    media_type = material.mime or materiales.TIPOS_PERMITIDOS.get(extension, "application/octet-stream")
 
+    # Siempre como descarga (attachment) y sin que el navegador adivine el
+    # tipo: un archivo subido nunca se "ejecuta" desde nuestro dominio.
     return Response(
         content=contenido,
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{material.titulo}{extension}"'},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(_nombre_descarga(material))}",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -1442,9 +1479,10 @@ async def eliminar_material(
     if material.subido_por != usuario.id:
         raise HTTPException(status_code=403, detail="Solo quien subió el material puede eliminarlo.")
 
-    await materiales.borrar_archivo(material.ruta_archivo)
-    if material.ruta_portada:
-        await materiales.borrar_archivo(material.ruta_portada)
+    if not _guardado_en_bd(material):
+        await materiales.borrar_archivo(material.ruta_archivo)
+        if material.ruta_portada:
+            await materiales.borrar_archivo(material.ruta_portada)
 
     db.delete(material)
     db.commit()
@@ -1475,14 +1513,6 @@ async def tutorial_chat(
 
 
 # --- Retos gamificados ---
-# Sin persistencia propia (ver retos.py) — reusa Usuario.nivel, que ya existe
-# para ajustar la verbosidad del planner/chat.
+# Un reto por usuario y día, con su racha (ver retos.py); el router se incluye
+# arriba con los demás.
 
-@app.get("/retos/diario", response_model=RetoDiario)
-async def reto_diario(usuario: Usuario = Depends(obtener_usuario_actual)):
-    try:
-        reto = await retos.generar_reto_diario(usuario.nivel)
-        registrar_evento(usuario.id, RETO)
-        return reto
-    except Exception:
-        raise HTTPException(status_code=502, detail="No se pudo generar el reto diario. Intenta de nuevo.")
