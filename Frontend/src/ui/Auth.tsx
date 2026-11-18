@@ -47,10 +47,7 @@ function Auth({ onEntrar }: Props) {
       setError('Completa tu nombre.')
       return
     }
-    if (!esCorreoInstitucional(email, dominios)) {
-      setError(`Usa tu correo institucional (${textoDominios(dominios)}).`)
-      return
-    }
+  
 
     setCargando(true)
     try {

@@ -68,8 +68,44 @@ import os
 import secrets
 import uuid
 from dotenv import load_dotenv
+import smtplib
+from email.message import EmailMessage
 
 load_dotenv()
+
+def enviar_codigo_verificacion(destinatario: str, codigo: str):
+    """Envía el código de activación de la cuenta."""
+
+    mensaje = EmailMessage()
+    mensaje["Subject"] = "Código de verificación - Shared-Reasoning"
+    mensaje["From"] = os.getenv("EMAIL_FROM")
+    mensaje["To"] = destinatario
+
+    mensaje.set_content(f"""
+Hola,
+
+Gracias por registrarte en Shared-Reasoning.
+
+Tu código de verificación es:
+
+{codigo}
+
+Introdúcelo en la aplicación para activar tu cuenta.
+
+Si no solicitaste este registro, ignora este mensaje.
+
+Equipo Shared-Reasoning
+""")
+
+    with smtplib.SMTP_SSL(
+        os.getenv("EMAIL_HOST", "smtp.gmail.com"),
+        int(os.getenv("EMAIL_PORT", "465"))
+    ) as servidor:
+        servidor.login(
+            os.getenv("EMAIL_USER"),
+            os.getenv("EMAIL_PASSWORD")
+        )
+        servidor.send_message(mensaje)
 
 app = FastAPI(title="Paralelo", version="1.0.0")
 
@@ -195,34 +231,50 @@ def _buscar_por_email(db: Session, email: str) -> Usuario | None:
     return db.query(Usuario).filter(func.lower(Usuario.email) == email.lower()).first()
 
 
+
 @app.post("/auth/registro", response_model=RegistroResponse, status_code=201)
 def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get_db)):
     verificar_frecuencia(f"auth:{_ip_de(request)}", FRECUENCIA_AUTH)
-    # Verificación previa por email (mensaje claro). La restricción UNIQUE de la
-    # BD es la garantía final ante condiciones de carrera.
+
     if _buscar_por_email(db, datos.email):
-        raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
+        raise HTTPException(
+            status_code=409,
+            detail="Ya existe una cuenta con este email."
+        )
 
     codigo = generar_codigo_verificacion()
+
     usuario = Usuario(
         nombre=datos.nombre,
         email=datos.email,
         contrasena_hash=hashear_contrasena(datos.contrasena),
-        # Roles (US06): correos en ADMIN_EMAILS arrancan como administrador
-        # (ver auth.rol_inicial) — es la única vía automática; el resto arranca
-        # como estudiante. Cualquier otro rol (incluido profesor) se asigna a
-        # mano desde PATCH /admin/usuarios/{id}, nunca por autoregistro.
         rol=rol_inicial(datos.email),
         email_verificado=False,
         codigo_verificacion=codigo,
     )
+
+    # Primero guardamos la cuenta en Supabase.
     db.add(usuario)
+
     try:
         db.commit()
-    except IntegrityError:
+        db.refresh(usuario)
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email.")
-    db.refresh(usuario)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo guardar la cuenta en la base de datos."
+        )
+
+    # Después enviamos el código de verificación.
+    try:
+        enviar_codigo_verificacion(usuario.email, codigo)
+    except Exception as error:
+        print(f"Error enviando correo de verificación: {error}")
+        raise HTTPException(
+            status_code=502,
+            detail="La cuenta fue creada, pero no se pudo enviar el correo de verificación. Contacta al administrador."
+        )
 
     return RegistroResponse(
         email=usuario.email,
@@ -230,6 +282,7 @@ def registro(datos: RegistroRequest, request: Request, db: Session = Depends(get
         codigo_verificacion=usuario.codigo_verificacion,
         mensaje="Cuenta creada. Verifica tu correo para activar la cuenta.",
     )
+
 
 
 @app.post("/auth/login", response_model=TokenResponse)
