@@ -7,7 +7,6 @@ import {
   login,
   verificarEmail,
   obtenerDominiosPermitidos,
-  esCorreoInstitucional,
   textoDominios,
   type Usuario,
 } from '../api/auth'
