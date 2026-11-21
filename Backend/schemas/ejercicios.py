@@ -77,6 +77,14 @@ class SolucionResponse(BaseModel):
     archivos: list[ArchivoSolucionResponse] = []
 
 
+class SolucionesPaginadasResponse(BaseModel):
+    items: list[SolucionResponse]
+    total: int
+    pagina: int
+    por_pagina: int
+    total_paginas: int
+
+
 class FeedbackActualizar(BaseModel):
     comentario: str = Field(min_length=1, max_length=5000)
 
@@ -131,3 +139,11 @@ class EjercicioResponse(BaseModel):
     total_soluciones: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+class EjerciciosPaginadosResponse(BaseModel):
+    items: list[EjercicioResponse]
+    total: int
+    pagina: int
+    por_pagina: int
+    total_paginas: int

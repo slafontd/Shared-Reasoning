@@ -28,8 +28,8 @@ from db.models import Curso, Ejercicio, EjercicioImagen, ProgresoEjercicio, Solu
 from rate_limit import verificar_frecuencia
 from roles import ESTUDIANTE, PROFESOR
 from schemas.ejercicios import (
-    EjercicioActualizar, EjercicioCrear, EjercicioResponse, FeedbackActualizar, ImagenEjercicioResponse,
-    ProgresoEjercicioActualizar, ProgresoEjercicioResponse, SolucionResponse,
+    EjercicioActualizar, EjercicioCrear, EjercicioResponse, EjerciciosPaginadosResponse, FeedbackActualizar, ImagenEjercicioResponse,
+    ProgresoEjercicioActualizar, ProgresoEjercicioResponse, SolucionesPaginadasResponse, SolucionResponse,
 )
 
 router = APIRouter(tags=["ejercicios"])
@@ -128,6 +128,71 @@ def listar_ejercicios(
             if r.id in propias:
                 r.mi_solucion = _a_solucion_response(propias[r.id])
     return respuestas
+
+
+@router.get(
+    "/cursos/{curso_id}/ejercicios/paginados",
+    response_model=EjerciciosPaginadosResponse,
+)
+def listar_ejercicios_paginados(
+    curso_id: UUID,
+    pagina: int = 1,
+    por_pagina: int = 10,
+    usuario: Usuario = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db),
+):
+    """Lista paginada de ejercicios para usuarios autorizados."""
+    if pagina < 1 or por_pagina < 1 or por_pagina > 100:
+        raise HTTPException(status_code=400, detail="Paginación inválida.")
+
+    curso = _curso_o_404(db, curso_id)
+    gestiona = gestiona_curso(usuario, curso)
+
+    if not (gestiona or esta_inscrito(db, usuario, curso.id)):
+        raise HTTPException(status_code=403, detail="Inscríbete en el curso para ver sus ejercicios.")
+
+    consulta = db.query(Ejercicio).filter(Ejercicio.curso_id == curso.id)
+    total = consulta.count()
+    ejercicios = (
+        consulta
+        .order_by(Ejercicio.fecha_creacion, Ejercicio.id)
+        .offset((pagina - 1) * por_pagina)
+        .limit(por_pagina)
+        .all()
+    )
+
+    respuestas = [EjercicioResponse.model_validate(e) for e in ejercicios]
+    ids = [e.id for e in ejercicios]
+
+    if ids:
+        if gestiona:
+            totales = dict(
+                db.query(Solucion.ejercicio_id, func.count(Solucion.id))
+                .filter(Solucion.ejercicio_id.in_(ids))
+                .group_by(Solucion.ejercicio_id)
+                .all()
+            )
+            for respuesta in respuestas:
+                respuesta.total_soluciones = totales.get(respuesta.id, 0)
+        else:
+            propias = {
+                solucion.ejercicio_id: solucion
+                for solucion in db.query(Solucion).filter(
+                    Solucion.ejercicio_id.in_(ids),
+                    Solucion.estudiante_id == usuario.id,
+                )
+            }
+            for respuesta in respuestas:
+                if respuesta.id in propias:
+                    respuesta.mi_solucion = _a_solucion_response(propias[respuesta.id])
+
+    return EjerciciosPaginadosResponse(
+        items=respuestas,
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+        total_paginas=(total + por_pagina - 1) // por_pagina,
+    )
 
 
 @router.get(
@@ -426,25 +491,40 @@ def retirar_solucion(
     db.commit()
 
 
-@router.get("/ejercicios/{ejercicio_id}/soluciones", response_model=list[SolucionResponse])
+@router.get("/ejercicios/{ejercicio_id}/soluciones", response_model=SolucionesPaginadasResponse)
 def listar_soluciones(
     ejercicio_id: UUID,
+    pagina: int = 1,
+    por_pagina: int = 20,
     usuario: Usuario = Depends(obtener_usuario_actual),
     db: Session = Depends(get_db),
 ):
-    """Las soluciones recibidas, de la más reciente a la más antigua. Solo
-    quien gestiona el curso (el profesor, o un administrador)."""
+    """Soluciones paginadas. Solo quien gestiona el curso."""
+    if pagina < 1 or por_pagina < 1 or por_pagina > 100:
+        raise HTTPException(status_code=400, detail="Paginación inválida.")
+
     ejercicio = db.get(Ejercicio, ejercicio_id)
     if ejercicio is None:
         raise HTTPException(status_code=404, detail="El ejercicio no existe o ya fue eliminado.")
     _exigir_gestion(usuario, ejercicio.curso)
+
+    consulta = db.query(Solucion).filter(Solucion.ejercicio_id == ejercicio.id)
+    total = consulta.count()
     soluciones = (
-        db.query(Solucion)
-        .filter(Solucion.ejercicio_id == ejercicio.id)
+        consulta
         .order_by(Solucion.fecha_entrega.desc(), Solucion.id)
+        .offset((pagina - 1) * por_pagina)
+        .limit(por_pagina)
         .all()
     )
-    return [_a_solucion_response(s) for s in soluciones]
+
+    return SolucionesPaginadasResponse(
+        items=[_a_solucion_response(s) for s in soluciones],
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+        total_paginas=(total + por_pagina - 1) // por_pagina,
+    )
 
 
 @router.put(

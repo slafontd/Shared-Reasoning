@@ -7,7 +7,7 @@ import { LogoWordmark } from './Logo'
 import type { Usuario } from '../api/auth'
 import { eliminarCurso, type Curso } from '../api/cursos'
 import {
-  listarEjercicios, crearEjercicio, actualizarEjercicio, eliminarEjercicio, subirImagenEjercicio, eliminarImagenEjercicio, cargarImagenEjercicio,
+  listarEjerciciosPaginados, crearEjercicio, actualizarEjercicio, eliminarEjercicio, subirImagenEjercicio, eliminarImagenEjercicio, cargarImagenEjercicio,
   MAX_IMAGENES_POR_EJERCICIO, MAX_BYTES_IMAGEN, TIPOS_IMAGEN, type Ejercicio, type ImagenEjercicio, type Solucion,
 } from '../api/ejercicios'
 import { MiniaturaArchivo, VisorImagen, validarArchivos } from './ArchivosAutenticados'
@@ -40,6 +40,11 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
   const puedeVerEjercicios = gestiona || curso.inscrito
 
   const [ejercicios, setEjercicios] = useState<Ejercicio[] | null>(null)
+  const [paginaEjercicios, setPaginaEjercicios] = useState(1)
+  const [totalEjercicios, setTotalEjercicios] = useState(0)
+  const [totalPaginasEjercicios, setTotalPaginasEjercicios] = useState(0)
+  const [recargaEjercicios, setRecargaEjercicios] = useState(0)
+
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [abiertoId, setAbiertoId] = useState<string | null>(null)
@@ -48,16 +53,38 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
   useEffect(() => {
     if (!puedeVerEjercicios) return
     let cancelado = false
-    listarEjercicios(curso.id)
-      .then((lista) => {
-        if (cancelado) return
-        setEjercicios(lista)
-        // El estudiante abre de entrada el primer ejercicio pendiente.
-        if (esEstudiante) setAbiertoId(lista.find((e) => !e.miSolucion)?.id ?? null)
-      })
-      .catch((e) => !cancelado && setError(e instanceof Error ? e.message : 'No se pudieron cargar los ejercicios.'))
+
+    async function cargar() {
+      try {
+        if (gestiona) {
+          const resultado = await listarEjerciciosPaginados(curso.id, paginaEjercicios)
+          if (cancelado) return
+          setEjercicios(resultado.items)
+          setTotalEjercicios(resultado.total)
+          setTotalPaginasEjercicios(resultado.totalPaginas)
+          if (abiertoId && !resultado.items.some((e) => e.id === abiertoId)) {
+            setAbiertoId(null)
+          }
+        } else {
+          const resultado = await listarEjerciciosPaginados(curso.id, paginaEjercicios)
+          if (cancelado) return
+          setEjercicios(resultado.items)
+          setTotalEjercicios(resultado.total)
+          setTotalPaginasEjercicios(resultado.totalPaginas)
+          if (esEstudiante) {
+            setAbiertoId(resultado.items.find((e) => !e.miSolucion)?.id ?? null)
+          }
+        }
+      } catch (e) {
+        if (!cancelado) {
+          setError(e instanceof Error ? e.message : 'No se pudieron cargar los ejercicios.')
+        }
+      }
+    }
+
+    cargar()
     return () => { cancelado = true }
-  }, [curso.id, puedeVerEjercicios, esEstudiante])
+  }, [curso.id, puedeVerEjercicios, esEstudiante, gestiona, paginaEjercicios, recargaEjercicios])
 
   function actualizar(id: string, cambios: Partial<Ejercicio>) {
     setEjercicios((actuales) => (actuales ?? []).map((e) => (e.id === id ? { ...e, ...cambios } : e)))
@@ -75,7 +102,7 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
   }
 
   const entregados = (ejercicios ?? []).filter((e) => e.miSolucion).length
-  const total = ejercicios?.length ?? 0
+  const total = gestiona ? totalEjercicios : (ejercicios?.length ?? 0)
 
   return (
     <TemaProvider tema={tema} className="min-h-screen" style={{ color: 'var(--ink)', background: 'linear-gradient(135deg,var(--bg1),var(--bg2))' }}>
@@ -166,7 +193,7 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
                 <TarjetaEjercicio
                   key={e.id}
                   ejercicio={e}
-                  numero={indice + 1}
+                  numero={gestiona ? (paginaEjercicios - 1) * 10 + indice + 1 : indice + 1}
                   abierto={abiertoId === e.id}
                   onAlternar={() => setAbiertoId((a) => (a === e.id ? null : e.id))}
                   puedeEliminar={gestiona}
@@ -175,8 +202,15 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
                   onVisor={(url, nombre) => setVisor({ url, nombre })}
                   onCambio={(cambios) => actualizar(e.id, cambios)}
                   onEliminado={() => {
-                    setEjercicios((actuales) => (actuales ?? []).filter((x) => x.id !== e.id))
+                    const nuevoTotal = Math.max(0, totalEjercicios - 1)
+                    const nuevasPaginas = Math.ceil(nuevoTotal / 10)
+                    setTotalEjercicios(nuevoTotal)
                     setAviso(`Ejercicio «${e.titulo}» eliminado.`)
+                    if (paginaEjercicios > Math.max(1, nuevasPaginas)) {
+                      setPaginaEjercicios(Math.max(1, nuevasPaginas))
+                    } else {
+                      setRecargaEjercicios((n) => n + 1)
+                    }
                   }}
                   onError={setError}
                   indiceAnimacion={indice}
@@ -185,12 +219,42 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
             </ol>
           )}
 
+          {(gestiona || esEstudiante) && totalPaginasEjercicios > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                Página {paginaEjercicios} de {totalPaginasEjercicios} · {total} ejercicios
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPaginaEjercicios((pagina) => Math.max(1, pagina - 1))}
+                  disabled={paginaEjercicios <= 1}
+                  className="text-xs rounded-lg px-3 py-1.5 border disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setPaginaEjercicios((pagina) => Math.min(totalPaginasEjercicios, pagina + 1))}
+                  disabled={paginaEjercicios >= totalPaginasEjercicios}
+                  className="text-xs rounded-lg px-3 py-1.5 border disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
           {esProfesorDelCurso && (
             <FormularioNuevoEjercicio
               cursoId={curso.id}
               onCreado={(nuevo) => {
-                setEjercicios((actuales) => [...(actuales ?? []), nuevo])
+                const nuevoTotal = totalEjercicios + 1
+                const ultimaPagina = Math.max(1, Math.ceil(nuevoTotal / 10))
+                setTotalEjercicios(nuevoTotal)
                 setAbiertoId(nuevo.id)
+                setPaginaEjercicios(ultimaPagina)
+                setRecargaEjercicios((n) => n + 1)
                 setAviso(null)
               }}
               onError={setError}

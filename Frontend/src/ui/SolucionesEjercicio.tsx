@@ -387,19 +387,29 @@ export function SolucionesRecibidas({ ejercicio, onVisor }: {
   const [abierto, setAbierto] = useState(false)
   const [soluciones, setSoluciones] = useState<Solucion[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const total = ejercicio.totalSoluciones ?? 0
+  const [pagina, setPagina] = useState(1)
+  const [total, setTotal] = useState(ejercicio.totalSoluciones ?? 0)
+  const [totalPaginas, setTotalPaginas] = useState(0)
+
+  async function cargarPagina(numero: number) {
+    setError(null)
+    setSoluciones(null)
+    try {
+      const resultado = await listarSoluciones(ejercicio.id, numero)
+      setSoluciones(resultado.items)
+      setTotal(resultado.total)
+      setPagina(resultado.pagina)
+      setTotalPaginas(resultado.totalPaginas)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron cargar las soluciones.')
+    }
+  }
 
   async function alternar() {
     const siguiente = !abierto
     setAbierto(siguiente)
-    // Se recarga cada vez que se abre: así se ven las entregas nuevas.
     if (siguiente) {
-      setError(null)
-      try {
-        setSoluciones(await listarSoluciones(ejercicio.id))
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'No se pudieron cargar las soluciones.')
-      }
+      await cargarPagina(1)
     }
   }
 
@@ -421,18 +431,43 @@ export function SolucionesRecibidas({ ejercicio, onVisor }: {
           ) : soluciones.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Ningún estudiante ha entregado este ejercicio todavía.</p>
           ) : (
-            soluciones.map((s, i) => (
-              <SolucionRecibida
-                key={s.id}
-                ejercicio={ejercicio}
-                solucion={s}
-                onVisor={onVisor}
-                onActualizar={(actualizada) => setSoluciones((actuales) =>
-                  actuales?.map((solucion) => solucion.id === actualizada.id ? actualizada : solucion) ?? null,
-                )}
-                animationDelay={`${Math.min(i, 6) * 0.05}s`}
-              />
-            ))
+            <>
+              {soluciones.map((s, i) => (
+                <SolucionRecibida
+                  key={s.id}
+                  ejercicio={ejercicio}
+                  solucion={s}
+                  onVisor={onVisor}
+                  onActualizar={(actualizada) => setSoluciones((actuales) =>
+                    actuales?.map((solucion) => solucion.id === actualizada.id ? actualizada : solucion) ?? null,
+                  )}
+                  animationDelay={`${Math.min(i, 6) * 0.05}s`}
+                />
+              ))}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  Página {pagina} de {totalPaginas} · {total} entregas
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => cargarPagina(pagina - 1)}
+                    disabled={pagina <= 1}
+                    className="text-xs rounded-lg px-3 py-1.5 border disabled:opacity-40"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => cargarPagina(pagina + 1)}
+                    disabled={pagina >= totalPaginas}
+                    className="text-xs rounded-lg px-3 py-1.5 border disabled:opacity-40"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}

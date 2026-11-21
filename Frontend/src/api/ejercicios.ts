@@ -134,6 +134,41 @@ export async function listarEjercicios(cursoId: string): Promise<Ejercicio[]> {
   return ((await res.json()) as EjercicioAPI[]).map(aEjercicio)
 }
 
+export type EjerciciosPaginados = {
+  items: Ejercicio[]
+  total: number
+  pagina: number
+  porPagina: number
+  totalPaginas: number
+}
+
+type EjerciciosPaginadosAPI = {
+  items: EjercicioAPI[]
+  total: number
+  pagina: number
+  por_pagina: number
+  total_paginas: number
+}
+
+export async function listarEjerciciosPaginados(
+  cursoId: string,
+  pagina = 1,
+  porPagina = 10,
+): Promise<EjerciciosPaginados> {
+  const res = await fetchAutenticado(
+    `${API_URL}/cursos/${cursoId}/ejercicios/paginados?pagina=${pagina}&por_pagina=${porPagina}`,
+  )
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+  const datos = (await res.json()) as EjerciciosPaginadosAPI
+  return {
+    items: datos.items.map(aEjercicio),
+    total: datos.total,
+    pagina: datos.pagina,
+    porPagina: datos.por_pagina,
+    totalPaginas: datos.total_paginas,
+  }
+}
+
 // Solo el profesor que creó el curso (403 para cualquier otro, administradores incluidos).
 export async function crearEjercicio(cursoId: string, datos: { titulo: string; enunciado?: string }): Promise<Ejercicio> {
   const res = await fetchAutenticado(`${API_URL}/cursos/${cursoId}/ejercicios`, {
@@ -246,11 +281,40 @@ export async function guardarProgresoEjercicio(
   return aProgreso((await res.json()) as ProgresoEjercicioAPI)
 }
 
-// Solo quien gestiona el curso: todas las soluciones recibidas de un ejercicio.
-export async function listarSoluciones(ejercicioId: string): Promise<Solucion[]> {
-  const res = await fetchAutenticado(`${API_URL}/ejercicios/${ejercicioId}/soluciones`)
+// Solo quien gestiona el curso: soluciones recibidas de un ejercicio, paginadas.
+export type SolucionesPaginadas = {
+  items: Solucion[]
+  total: number
+  pagina: number
+  porPagina: number
+  totalPaginas: number
+}
+
+type SolucionesPaginadasAPI = {
+  items: SolucionAPI[]
+  total: number
+  pagina: number
+  por_pagina: number
+  total_paginas: number
+}
+
+export async function listarSoluciones(
+  ejercicioId: string,
+  pagina = 1,
+  porPagina = 20,
+): Promise<SolucionesPaginadas> {
+  const res = await fetchAutenticado(
+    `${API_URL}/ejercicios/${ejercicioId}/soluciones?pagina=${pagina}&por_pagina=${porPagina}`,
+  )
   if (!res.ok) throw new Error(await mensajeDeError(res))
-  return ((await res.json()) as SolucionAPI[]).map(aSolucion)
+  const datos = (await res.json()) as SolucionesPaginadasAPI
+  return {
+    items: datos.items.map(aSolucion),
+    total: datos.total,
+    pagina: datos.pagina,
+    porPagina: datos.por_pagina,
+    totalPaginas: datos.total_paginas,
+  }
 }
 
 // Igual que las imágenes del enunciado: exige sesión, así que se descarga con
