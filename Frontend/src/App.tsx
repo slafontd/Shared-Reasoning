@@ -13,6 +13,7 @@ import Admin from './ui/Admin'
 import Metricas from './ui/Metricas'
 import DevApp from './DevApp'
 import type { Sesion, Nivel } from './ui/tipos'
+import type { Ejercicio } from './api/ejercicios'
 import { actualizarNivel, alExpirarSesion, borrarToken, obtenerUsuarioActual, type Usuario } from './api/auth'
 
 type Paso = 'intro' | 'auth' | 'encuesta' | 'importar' | 'bienvenida' | 'principal'
@@ -42,6 +43,7 @@ function App() {
   const [pantallaExtra, setPantallaExtra] = useState<'biblioteca' | 'retos' | 'retoDiario' | 'cursos' | 'admin' | 'metricas' | null>(null)
   const [nivel, setNivel] = useState<Nivel>('intermedio')
   const [sesion, setSesion] = useState<Sesion | null>(null)
+  const [ejercicioGuia, setEjercicioGuia] = useState<Ejercicio | null>(null)
   // Usuario autenticado (nombre/correo) para el panel de cuenta del sidebar.
   // Las API keys propias del usuario ahora se guardan cifradas en el backend
   // (Mi cuenta → API keys propias) — ya no viven en el estado de App.
@@ -109,7 +111,56 @@ function App() {
     return <RetoDiario onVolver={() => setPantallaExtra('retos')} />
   }
   if (pantallaExtra === 'cursos') {
-    return <Cursos usuario={usuario} onVolver={() => setPantallaExtra(null)} />
+    return (
+      <>
+       <div style={{ display: ejercicioGuia ? 'none' : 'block' }}>
+         <Cursos
+           usuario={usuario}
+           onVolver={() => setPantallaExtra(null)}
+           onAbrirGuia={(ejercicio) => setEjercicioGuia(ejercicio)}
+         />
+       </div>
+
+       {ejercicioGuia && (
+         <Bienvenida
+           nivel={nivel}
+           usuario={usuario}
+           onActualizarUsuario={setUsuario}
+           onCerrarSesion={cerrarSesion}
+           onListo={(nuevaSesion) => {
+             setEjercicioGuia(null)
+             setPantallaExtra(null)
+             setSesion(nuevaSesion)
+           }}
+           onAbrirBiblioteca={() => {
+             setEjercicioGuia(null)
+             setPantallaExtra('biblioteca')
+           }}
+           onAbrirRetos={() => {
+             setEjercicioGuia(null)
+             setPantallaExtra('retos')
+           }}
+           onAbrirCursos={() => setEjercicioGuia(null)}
+           onAbrirAdmin={() => {
+             setEjercicioGuia(null)
+             setPantallaExtra('admin')
+           }}
+           onAbrirMetricas={() => {
+             setEjercicioGuia(null)
+             setPantallaExtra('metricas')
+           }}
+           ejercicioGuia={ejercicioGuia}
+           onVolverEjercicio={() => setEjercicioGuia(null)}
+           onVolverInicio={() => {
+             setEjercicioGuia(null)
+             setPantallaExtra(null)
+             setSesion(null)
+             setPaso('bienvenida')
+           }}
+         />
+       )}
+     </>
+    )
   }
   if (pantallaExtra === 'admin') {
     return <Admin usuarioActualId={usuario!.usuarioId} onVolver={() => setPantallaExtra(null)} />

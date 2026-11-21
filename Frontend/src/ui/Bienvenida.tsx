@@ -12,7 +12,7 @@ import SelectorModelo from './SelectorModelo'
 import { comprimirImagen } from './imagenUtil'
 import { useHistorialSesiones, BuscadorHistorial, ItemHistorial, ToastHistorial } from './HistorialSesiones'
 import { INTENCIONES, type Intencion, type Sesion, type Nivel } from './tipos'
-
+import type { Ejercicio } from '../api/ejercicios'
 // Lado máximo del esquemático guardado — más grande que el de la foto de
 // perfil (512px) porque un circuito necesita más detalle para seguir siendo
 // legible (valores de componentes, etiquetas de pines).
@@ -22,6 +22,9 @@ type Props = {
   onListo: (sesion: Sesion) => void
   nivel: Nivel
   usuario: Usuario | null
+  ejercicioGuia?: Ejercicio | null
+  onVolverEjercicio?: () => void
+  onVolverInicio?: () => void
   onActualizarUsuario: (u: Usuario) => void
   onCerrarSesion: () => void
   onAbrirBiblioteca: () => void
@@ -53,7 +56,18 @@ const PROMPT_ARMAR_PROTOBOARD = [
 
 // Pantalla de entrada: subir esquemático + prompt opcional + modelo.
 // Si no hay prompt, se pregunta la intención con un cuestionario ligero.
-function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesion, onAbrirBiblioteca, onAbrirRetos, onAbrirCursos, onAbrirAdmin, onAbrirMetricas }: Props) {
+function Bienvenida({
+ onListo,
+ nivel,
+ usuario,
+ onActualizarUsuario,
+ onCerrarSesion,
+ onAbrirBiblioteca,
+ onAbrirRetos,
+ onAbrirCursos,
+ onAbrirAdmin,
+ onAbrirMetricas,
+}: Props) {
   const [imagen, setImagen] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -222,6 +236,8 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
   }
 
   return (
+    <>
+
     <TemaProvider tema={tema} className="min-h-screen flex" style={{ color: 'var(--ink)', background: 'linear-gradient(135deg,var(--bg1),var(--bg2))' }}>
       <ToastHistorial mensaje={avisoHistorial} />
       {/* ---- Sidebar: historial real de sesiones del usuario (#73) ---- */}
@@ -516,6 +532,7 @@ function Bienvenida({ onListo, nivel, usuario, onActualizarUsuario, onCerrarSesi
         </div>
       </div>
     </TemaProvider>
+   </>
   )
 }
 

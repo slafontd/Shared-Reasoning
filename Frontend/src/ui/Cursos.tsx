@@ -7,6 +7,7 @@ import {
   CURSOS_POR_PAGINA, type Curso,
 } from '../api/cursos'
 import type { Usuario } from '../api/auth'
+import type { Ejercicio } from '../api/ejercicios'
 import CursoDetalle from './CursoDetalle'
 import { EtiquetaCodigo, EtiquetaInscrito, fechaLegible } from './cursosComun'
 import ProgresoEstudiantes from './ProgresoEstudiantes'
@@ -14,6 +15,7 @@ import ProgresoEstudiantes from './ProgresoEstudiantes'
 type Props = {
   usuario: Usuario | null
   onVolver: () => void
+  onAbrirGuia: (ejercicio: Ejercicio) => void
 }
 
 // Límites iguales a los del backend (schemas/cursos.py).
@@ -37,7 +39,7 @@ const estiloCampo = { background: 'var(--bg1)', border: '1px solid var(--border)
 //  «Todos los cursos» (los de todos los profesores). Al abrir uno se llega a
 //  CursoDetalle, con sus ejercicios y las soluciones.
 // ============================================================
-function Cursos({ usuario, onVolver }: Props) {
+function Cursos({ usuario, onVolver, onAbrirGuia }: Props) {
   const [tema, setTema] = useState<Tema>('light')
   // Quien gestiona cursos (profesor o administrador) ve la interfaz de
   // gestión; el resto, la de estudiante (unirse con código, "mis cursos").
@@ -153,6 +155,7 @@ function Cursos({ usuario, onVolver }: Props) {
         tema={tema}
         onCambiarTema={() => setTema((t) => (t === 'light' ? 'dark' : 'light'))}
         onVolver={() => setSeleccionado(null)}
+	onAbrirGuia={onAbrirGuia}
         onEliminado={(c) => {
           setCursos((actuales) => actuales.filter((x) => x.id !== c.id))
           setSeleccionado(null)

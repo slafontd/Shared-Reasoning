@@ -20,6 +20,7 @@ type Props = {
   tema: Tema
   onCambiarTema: () => void
   onVolver: () => void
+  onAbrirGuia: (ejercicio: Ejercicio) => void
   // El curso se eliminó desde esta pantalla: la lista debe sacarlo.
   onEliminado: (curso: Curso) => void
 }
@@ -31,7 +32,7 @@ const LIMITES_IMAGEN = { tipos: TIPOS_IMAGEN, maxBytes: MAX_BYTES_IMAGEN, maxCan
 //  Un curso: su información y sus ejercicios, organizados en el orden en
 //  que los subió el profesor (el primero que publicó, primero).
 // ============================================================
-function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onEliminado }: Props) {
+function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onEliminado, onAbrirGuia }: Props) {
   const esAdmin = usuario?.rol === 'administrador'
   // Solo el profesor que creó el curso crea ejercicios y les adjunta imágenes.
   const esProfesorDelCurso = usuario?.rol === 'profesor' && curso.creadoPor === usuario.usuarioId
@@ -199,6 +200,7 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
                   puedeEliminar={gestiona}
                   puedeAdjuntar={esProfesorDelCurso}
                   esEstudiante={esEstudiante}
+                  onAbrirGuia={() => onAbrirGuia(e)}
                   onVisor={(url, nombre) => setVisor({ url, nombre })}
                   onCambio={(cambios) => actualizar(e.id, cambios)}
                   onEliminado={() => {
@@ -272,7 +274,7 @@ function CursoDetalle({ curso, usuario, tema, onCambiarTema, onVolver, onElimina
 //  Un ejercicio dentro de la lista: acordeón numerado.
 // ------------------------------------------------------------
 function TarjetaEjercicio({
-  ejercicio, numero, abierto, onAlternar, puedeEliminar, puedeAdjuntar, esEstudiante,
+  ejercicio, numero, abierto, onAlternar, puedeEliminar, puedeAdjuntar, esEstudiante, onAbrirGuia,
   onVisor, onCambio, onEliminado, onError, indiceAnimacion,
 }: {
   ejercicio: Ejercicio
@@ -282,6 +284,7 @@ function TarjetaEjercicio({
   puedeEliminar: boolean
   puedeAdjuntar: boolean
   esEstudiante: boolean
+  onAbrirGuia: () => void
   onVisor: (url: string, nombre: string) => void
   onCambio: (cambios: Partial<Ejercicio>) => void
   onEliminado: () => void
@@ -419,6 +422,15 @@ function TarjetaEjercicio({
           )}
           <ChevronDown size={16} className="transition-transform shrink-0" style={{ transform: abierto ? 'rotate(180deg)' : 'none', color: 'var(--ink-soft)' }} />
         </button>
+        {esEstudiante && (
+	  <button
+            type="button"
+            onClick={onAbrirGuia}
+            className="rounded-lg px-3 py-2 text-xs font-semibold accent-bg text-white hover:brightness-110 transition shrink-0"
+          >
+            Abrir guía
+          </button>
+        )}  
         {puedeAdjuntar && !enEdicion && (
           <button
             onClick={() => { if (!abierto) onAlternar(); abrirEdicion() }}
