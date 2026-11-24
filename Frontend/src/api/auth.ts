@@ -145,6 +145,28 @@ export async function verificarEmail(email: string, codigo: string): Promise<voi
   if (!res.ok) throw new Error(await mensajeDeError(res))
 }
 
+export async function solicitarRecuperacion(email: string): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/solicitar-recuperacion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+}
+
+export async function restablecerContrasena(
+  email: string,
+  codigo: string,
+  contrasena_nueva: string,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/restablecer-contrasena`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, codigo, contrasena_nueva }),
+  })
+  if (!res.ok) throw new Error(await mensajeDeError(res))
+}
+
 export async function login(email: string, contrasena: string): Promise<Usuario> {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',

@@ -231,6 +231,29 @@ class ContrasenaRequest(BaseModel):
             raise ValueError("La contraseña debe incluir al menos un número.")
         return valor
 
+class SolicitarRecuperacionRequest(BaseModel):
+    email: EmailStr
+
+    _normalizar_email = field_validator("email", mode="before")(normalizar_email)
+
+
+class RestablecerContrasenaRequest(BaseModel):
+    email: EmailStr
+    codigo: str = Field(min_length=6, max_length=6)
+    contrasena_nueva: str = Field(min_length=12, max_length=128)
+
+    _normalizar_email = field_validator("email", mode="before")(normalizar_email)
+
+    @field_validator("contrasena_nueva")
+    @classmethod
+    def validar_complejidad(cls, valor: str) -> str:
+        if not any(c.isupper() for c in valor):
+            raise ValueError("La contraseña debe incluir al menos una mayúscula.")
+        if not any(c.islower() for c in valor):
+            raise ValueError("La contraseña debe incluir al menos una minúscula.")
+        if not any(c.isdigit() for c in valor):
+            raise ValueError("La contraseña debe incluir al menos un número.")
+        return valor
 
 class NivelRequest(BaseModel):
     nivel: str

@@ -6,6 +6,8 @@ import {
   registrar,
   login,
   verificarEmail,
+  solicitarRecuperacion,
+  restablecerContrasena,
   obtenerDominiosPermitidos,
   textoDominios,
   type Usuario,
@@ -25,6 +27,10 @@ function Auth({ onEntrar }: Props) {
   const [esperandoVerificacion, setEsperandoVerificacion] = useState(false)
   const [codigoVerificacion, setCodigoVerificacion] = useState('')
   const [correoPendiente, setCorreoPendiente] = useState('')
+  const [recuperando, setRecuperando] = useState(false)
+  const [codigoRecuperacion, setCodigoRecuperacion] = useState('')
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [codigoEnviado, setCodigoEnviado] = useState(false)
   // Dominios de correo institucional aceptados en registro e inicio de sesión.
   const [dominios, setDominios] = useState<string[]>(['eafit.edu.co'])
 
@@ -95,6 +101,50 @@ function Auth({ onEntrar }: Props) {
     }
   }
 
+  async function enviarCodigoRecuperacion() {
+    if (!email.trim()) {
+      setError('Introduce tu correo electrónico.')
+      return
+    }
+
+    setCargando(true)
+    setError('')
+
+    try {
+      await solicitarRecuperacion(email.trim())
+      setCodigoEnviado(true)
+      setError('Si el correo corresponde a una cuenta verificada, recibirás un código. Revisa tu bandeja de entrada.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo solicitar el código.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  async function confirmarRecuperacion() {
+    if (!codigoRecuperacion.trim() || !nuevaPassword) {
+      setError('Completa el código y la nueva contraseña.')
+      return
+    }
+
+    setCargando(true)
+    setError('')
+
+    try {
+      await restablecerContrasena(email.trim(), codigoRecuperacion.trim(), nuevaPassword)
+      setRecuperando(false)
+      setCodigoEnviado(false)
+      setCodigoRecuperacion('')
+      setNuevaPassword('')
+      setPassword('')
+      setError('Contraseña actualizada. Ya puedes iniciar sesión.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo actualizar la contraseña.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
   return (
     <TemaProvider tema="light" className="min-h-screen" style={{ background: 'var(--bg1)', color: 'var(--ink)' }}>
       <div className="min-h-screen grid place-items-center p-6">
@@ -129,16 +179,83 @@ function Auth({ onEntrar }: Props) {
               e.preventDefault()
               if (esperandoVerificacion) {
                 confirmarVerificacion()
+              } else if (recuperando) {
+                if (codigoEnviado) {
+                  confirmarRecuperacion()
+                } else {
+                  enviarCodigoRecuperacion()
+                }
               } else {
                 enviar()
               }
             }}
             className="space-y-4"
           >
-            {esperandoVerificacion ? (
+            {recuperando ? (
+              <>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>
+                  Recuperar contraseña
+                </h2>
+                <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+                  {codigoEnviado
+                    ? 'Introduce el código recibido por correo y tu nueva contraseña.'
+                    : 'Te enviaremos un código de recuperación a tu correo.'}
+                </p>
+
+                <div>
+                  <label className="block text-sm mb-1.5">Correo electrónico</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={codigoEnviado}
+                    required
+                    className={inputClass}
+                    style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                  />
+                </div>
+
+                {codigoEnviado && (
+                  <>
+                    <div>
+                      <label className="block text-sm mb-1.5">Código de recuperación</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={codigoRecuperacion}
+                        onChange={(e) => setCodigoRecuperacion(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        placeholder="123456"
+                        className={inputClass}
+                        style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm mb-1.5">Nueva contraseña</label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={12}
+                        maxLength={128}
+                        value={nuevaPassword}
+                        onChange={(e) => setNuevaPassword(e.target.value)}
+                        required
+                        className={inputClass}
+                        style={{ background: 'var(--bg1)', color: 'var(--ink)' }}
+                      />
+                      <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                        Mínimo 12 caracteres, con mayúscula, minúscula y número.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : esperandoVerificacion ? (
               <>
                 <div>
-                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Código de verificación</label>
+                  <label className="block text-sm mb-1.5">Código de verificación</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -158,7 +275,7 @@ function Auth({ onEntrar }: Props) {
               <>
                 {tab === 'registro' && (
                   <div>
-                    <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Nombre</label>
+                    <label className="block text-sm mb-1.5">Nombre</label>
                     <input
                       type="text"
                       autoComplete="name"
@@ -169,8 +286,9 @@ function Auth({ onEntrar }: Props) {
                     />
                   </div>
                 )}
+
                 <div>
-                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Correo Electrónico</label>
+                  <label className="block text-sm mb-1.5">Correo electrónico</label>
                   <input
                     type="email"
                     autoComplete="email"
@@ -186,8 +304,9 @@ function Auth({ onEntrar }: Props) {
                     </p>
                   )}
                 </div>
+
                 <div>
-                  <label className="block text-sm mb-1.5" style={{ color: 'var(--ink-soft)' }}>Contraseña</label>
+                  <label className="block text-sm mb-1.5">Contraseña</label>
                   <div className="relative">
                     <input
                       type={verPassword ? 'text' : 'password'}
@@ -200,9 +319,8 @@ function Auth({ onEntrar }: Props) {
                     <button
                       type="button"
                       onClick={() => setVerPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 grid place-items-center w-6 h-6 hover:opacity-70 transition"
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
                       style={{ color: 'var(--ink-soft)' }}
-                      title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {verPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -212,34 +330,67 @@ function Auth({ onEntrar }: Props) {
                       Mínimo 12 caracteres, con mayúscula, minúscula y número.
                     </p>
                   )}
+                  {tab === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecuperando(true)
+                        setCodigoEnviado(false)
+                        setError('')
+                      }}
+                      className="text-sm mt-2 hover:underline"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  )}
                 </div>
               </>
             )}
 
             {error && (
               <div
-                className="rounded-xl px-3 py-2 text-sm flex items-start gap-2"
+                className="rounded-xl px-3 py-2 text-sm"
                 role="alert"
                 style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.4)', color: '#b91c1c' }}
               >
-                <span>⚠️</span><span className="whitespace-pre-line">{error}</span>
+                {error}
               </div>
             )}
 
             <button
               type="submit"
               disabled={cargando}
-              className="w-full py-3 rounded-full font-bold shadow-lg hover:brightness-105 active:scale-[0.98] transition disabled:opacity-60"
+              className="w-full py-3 rounded-full font-bold shadow-lg hover:brightness-105 transition disabled:opacity-60"
               style={{ background: 'var(--accent)', color: 'var(--bg2)' }}
             >
               {cargando
                 ? 'Un momento...'
-                : esperandoVerificacion
-                  ? 'Confirmar verificación'
-                  : tab === 'login'
-                    ? 'Entrar a la mesa de trabajo'
-                    : 'Crear cuenta y entrar'}
+                : recuperando
+                  ? codigoEnviado ? 'Cambiar contraseña' : 'Enviar código'
+                  : esperandoVerificacion
+                    ? 'Confirmar verificación'
+                    : tab === 'login'
+                      ? 'Entrar a la mesa de trabajo'
+                      : 'Crear cuenta y entrar'}
             </button>
+
+            {recuperando && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRecuperando(false)
+                  setCodigoEnviado(false)
+                  setCodigoRecuperacion('')
+                  setNuevaPassword('')
+                  setError('')
+                }}
+                className="w-full text-sm hover:underline"
+                style={{ color: 'var(--ink-soft)' }}
+              >
+                Volver al inicio de sesión
+              </button>
+            )}
           </form>
         </div>
       </div>

@@ -36,6 +36,8 @@ from auth import (
     UsuarioResponse,
     PerfilRequest,
     ContrasenaRequest,
+    SolicitarRecuperacionRequest,
+    RestablecerContrasenaRequest,
     ApiKeysRequest,
     ApiKeysConfiguradas,
     DOMINIOS_INSTITUCIONALES,
@@ -64,12 +66,13 @@ from rate_limit import (
     FRECUENCIA_AUTH,
 )
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import asyncio
 import json
 import os
 from urllib.parse import quote
 import secrets
+import hashlib
 import uuid
 from dotenv import load_dotenv
 import smtplib
@@ -97,6 +100,40 @@ Tu código de verificación es:
 Introdúcelo en la aplicación para activar tu cuenta.
 
 Si no solicitaste este registro, ignora este mensaje.
+
+Equipo Shared-Reasoning
+""")
+
+    with smtplib.SMTP_SSL(
+        os.getenv("EMAIL_HOST", "smtp.gmail.com"),
+        int(os.getenv("EMAIL_PORT", "465"))
+    ) as servidor:
+        servidor.login(
+            os.getenv("EMAIL_USER"),
+            os.getenv("EMAIL_PASSWORD")
+        )
+        servidor.send_message(mensaje)
+
+def enviar_codigo_recuperacion(destinatario: str, codigo: str):
+    """Envía un código temporal para recuperar la contraseña."""
+
+    mensaje = EmailMessage()
+    mensaje["Subject"] = "Recuperar contraseña - Shared-Reasoning"
+    mensaje["From"] = os.getenv("EMAIL_FROM")
+    mensaje["To"] = destinatario
+
+    mensaje.set_content(f"""
+Hola,
+
+Recibimos una solicitud para recuperar tu contraseña de Shared-Reasoning.
+
+Tu código de recuperación es:
+
+{codigo}
+
+Este código vence en 15 minutos.
+
+Si no solicitaste cambiar tu contraseña, ignora este mensaje.
 
 Equipo Shared-Reasoning
 """)
@@ -354,6 +391,93 @@ def verificar_email(datos: dict, db: Session = Depends(get_db)):
     db.refresh(usuario)
     return {"email": usuario.email, "email_verificado": True, "mensaje": "Correo verificado correctamente."}
 
+@app.post("/auth/solicitar-recuperacion")
+def solicitar_recuperacion(
+    datos: SolicitarRecuperacionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verificar_frecuencia(
+        f"recuperacion:{_ip_de(request)}",
+        FRECUENCIA_AUTH
+    )
+
+    usuario = _buscar_por_email(db, datos.email)
+
+    # Respuesta genérica para no revelar si una cuenta existe.
+    respuesta = {
+        "mensaje": "Si el correo corresponde a una cuenta verificada, recibirás un código de recuperación."
+    }
+
+    if usuario is None or not usuario.email_verificado or not usuario.activo:
+        return respuesta
+
+    codigo = f"{secrets.randbelow(1_000_000):06d}"
+
+    usuario.codigo_recuperacion_hash = hashlib.sha256(
+        codigo.encode()
+    ).hexdigest()
+
+    usuario.codigo_recuperacion_expira = (
+        datetime.now(timezone.utc) + timedelta(minutes=15)
+    )
+
+    db.commit()
+
+    try:
+        enviar_codigo_recuperacion(usuario.email, codigo)
+    except Exception as error:
+        print(f"Error enviando correo de recuperación: {error}")
+
+        usuario.codigo_recuperacion_hash = None
+        usuario.codigo_recuperacion_expira = None
+        db.commit()
+
+    return respuesta
+
+
+@app.post("/auth/restablecer-contrasena")
+def restablecer_contrasena(
+    datos: RestablecerContrasenaRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verificar_frecuencia(
+        f"recuperacion:{_ip_de(request)}",
+        FRECUENCIA_AUTH
+    )
+
+    usuario = _buscar_por_email(db, datos.email)
+
+    if usuario is None or not usuario.email_verificado:
+        raise HTTPException(
+            status_code=400,
+            detail="Código incorrecto o vencido."
+        )
+
+    codigo_hash = hashlib.sha256(datos.codigo.encode()).hexdigest()
+
+    if (
+        not usuario.codigo_recuperacion_hash
+        or not usuario.codigo_recuperacion_expira
+        or usuario.codigo_recuperacion_expira <= datetime.now(timezone.utc)
+        or not secrets.compare_digest(
+            usuario.codigo_recuperacion_hash,
+            codigo_hash
+        )
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Código incorrecto o vencido."
+        )
+
+    usuario.contrasena_hash = hashear_contrasena(datos.contrasena_nueva)
+    usuario.codigo_recuperacion_hash = None
+    usuario.codigo_recuperacion_expira = None
+
+    db.commit()
+
+    return {"mensaje": "Contraseña actualizada correctamente."}
 
 @app.get("/auth/me", response_model=UsuarioResponse)
 def usuario_actual(usuario: Usuario = Depends(obtener_usuario_actual)):
