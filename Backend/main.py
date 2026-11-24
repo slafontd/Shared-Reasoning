@@ -1362,7 +1362,9 @@ async def subir_material(
         ruta_archivo = f"archivos/{material_id}{extension}"
         try:
             await materiales.subir_archivo(ruta_archivo, contenido, mime)
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.exception("Error subiendo material a Supabase: %s", e)
             raise HTTPException(status_code=502, detail="No se pudo subir el archivo al almacenamiento. Intenta de nuevo.")
         ruta_portada = None
         if portada_bytes:

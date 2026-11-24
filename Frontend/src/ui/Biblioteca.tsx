@@ -125,14 +125,16 @@ function PestanaMateriales({ usuario }: { usuario: Usuario | null }) {
           className="rounded-xl px-3 py-2 text-sm outline-none flex-1 min-w-48"
           style={{ background: 'var(--bg1)', border: '1px solid var(--border)', color: 'var(--ink)' }}
         />
-        <button
-          onClick={() => setModalSubidaAbierto(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
-        >
-          <Upload size={15} />
-          Subir material
-        </button>
-      </div>
+       {usuario?.rol !== 'estudiante' && (
+         <button
+           onClick={() => setModalSubidaAbierto(true)}
+           className="flex items-center gap-1.5 px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium shadow hover:brightness-110 transition"
+         >
+           <Upload size={15} />
+           Subir material
+         </button>
+       )}
+     </div>
 
       <div className="flex flex-wrap gap-1.5">
         {CATEGORIAS.map((c) => (

@@ -101,6 +101,7 @@ async def subir_archivo(ruta: str, contenido: bytes, content_type: str) -> None:
             headers={**_headers(), "content-type": content_type},
             content=contenido,
         )
+        print("RESPUESTA SUPABASE:", r.status_code, r.text, flush=True)
         r.raise_for_status()
 
 
