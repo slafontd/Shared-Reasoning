@@ -4,7 +4,7 @@ import { analizarEsquematico } from '../api/analizar'
 import { planificarCircuito } from '../api/planificar'
 import { crearSesion, abrirSesion } from '../api/sesiones'
 import { type Usuario, obtenerModelosDisponibles, type ModelosDisponiblesUsuario } from '../api/auth'
-import { obtenerBiblioteca, type Biblioteca, type Dificultad } from '../api/biblioteca'
+import { listarMateriales, obtenerArchivoMaterial, type Material, type Dificultad } from '../api/materiales'
 import PanelUsuario from './PanelUsuario'
 import TemaProvider, { type Tema } from './theme'
 import { LogoWordmark } from './Logo'
@@ -130,27 +130,55 @@ function Bienvenida({
   // por dificultad — alternativa a subir el propio. Se pide una sola vez al
   // montar, es pública y liviana (una decena de imágenes).
   const [origenImagen, setOrigenImagen] = useState<'subir' | 'biblioteca'>('subir')
-  const [biblioteca, setBiblioteca] = useState<Biblioteca | null>(null)
-  const [dificultadActiva, setDificultadActiva] = useState<Dificultad>('facil')
+  const [biblioteca, setBiblioteca] = useState<Material[]>([])
+  const [previews, setPreviews] = useState<Record<string, string>>({})
+  const [dificultadActiva, setDificultadActiva] = useState<Dificultad>('basico')
   const [cargandoElegida, setCargandoElegida] = useState(false)
 
   useEffect(() => {
-    obtenerBiblioteca().then(setBiblioteca).catch(() => setBiblioteca(null))
-  }, [])
+    if (!usuario || origenImagen !== 'biblioteca') return
+    listarMateriales({ categoria: 'esquematico' })
+      .then(setBiblioteca)
+      .catch(() => setBiblioteca([]))
+  }, [usuario, origenImagen])
+  
+  useEffect(() => {
+    let cancelado = false
+    const urls: string[] = []
+  
+    Promise.all(biblioteca.map(async (item) => {
+      try {
+        const archivo = await obtenerArchivoMaterial(item)
+        const url = URL.createObjectURL(archivo)
+        urls.push(url)
+        return [item.id, url] as const
+      } catch {
+        return [item.id, ''] as const
+      }
+    })).then((entradas) => {
+      if (cancelado) {
+        urls.forEach(URL.revokeObjectURL)
+      } else {
+        setPreviews(Object.fromEntries(entradas))
+      }
+    })
+  
+    return () => {
+      cancelado = true
+      urls.forEach(URL.revokeObjectURL)
+    }
+  }, [biblioteca])
 
   // Trae la imagen elegida de la biblioteca y la mete al mismo flujo que un
   // archivo subido a mano (recibirArchivo) — de ahí en adelante no hay
   // distinción entre "subida" o "de biblioteca", es solo un File más.
-  async function elegirDeBiblioteca(item: { nombre: string; url: string }) {
+  async function elegirDeBiblioteca(item: Material) {
     setCargandoElegida(true)
     setError(null)
     try {
-      const res = await fetch(item.url)
-      if (!res.ok) throw new Error('No se pudo cargar esa imagen.')
-      const blob = await res.blob()
-      const extension = blob.type.split('/')[1] ?? 'png'
-      recibirArchivo(new File([blob], `${item.nombre}.${extension}`, { type: blob.type }))
-      setOrigenImagen('subir') // vuelve a la vista normal, ahora con el preview ya elegido
+      const archivo = await obtenerArchivoMaterial(item)
+      recibirArchivo(archivo)
+      setOrigenImagen('subir')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar esa imagen.')
     } finally {
@@ -433,7 +461,7 @@ function Bienvenida({
                 /* Biblioteca de esquemáticos de ejemplo, por dificultad */
                 <div className="rounded-xl p-3 min-h-48" style={{ border: '1px solid var(--border)', background: 'var(--bg1)' }}>
                   <div className="flex gap-1 mb-3">
-                    {(['facil', 'intermedio', 'dificil'] as Dificultad[]).map((d) => (
+                    {(['basico', 'intermedio', 'experto'] as Dificultad[]).map((d) => (
                       <button
                         key={d}
                         type="button"
@@ -444,18 +472,18 @@ function Bienvenida({
                           color: dificultadActiva === d ? 'var(--bg2)' : 'var(--ink-soft)',
                         }}
                       >
-                        {d}
+                        {({ basico: 'Básico', intermedio: 'Intermedio', experto: 'Experto' } as Record<string, string>)[d]}
                       </button>
                     ))}
                   </div>
 
                   {!biblioteca ? (
                     <p className="text-xs text-center py-8" style={{ color: 'var(--ink-soft)' }}>Cargando biblioteca…</p>
-                  ) : biblioteca[dificultadActiva].length === 0 ? (
+                  ) : biblioteca.filter((m) => m.dificultad === dificultadActiva).length === 0 ? (
                     <p className="text-xs text-center py-8" style={{ color: 'var(--ink-soft)' }}>Sin ejemplos en esta dificultad todavía.</p>
                   ) : (
                     <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                      {biblioteca[dificultadActiva].map((item) => (
+                      {biblioteca.filter((m) => m.dificultad === dificultadActiva).map((item) => (
                         <button
                           key={item.id}
                           type="button"
@@ -463,10 +491,10 @@ function Bienvenida({
                           disabled={cargandoElegida}
                           className="rounded-lg overflow-hidden transition hover:brightness-95 disabled:opacity-40"
                           style={{ border: '1px solid var(--border)' }}
-                          title={item.nombre}
+                          title={item.titulo}
                         >
-                          <img src={item.url} alt={item.nombre} className="w-full h-16 object-cover" style={{ background: 'var(--bg2)' }} />
-                          <span className="block text-[10px] px-1 py-1 truncate">{item.nombre}</span>
+                          <img src={previews[item.id] || item.portadaUrl || ''} className="w-full h-16 object-cover" style={{ background: 'var(--bg2)' }} />
+                          <span className="block text-[10px] px-1 py-1 truncate">{item.titulo}</span>
                         </button>
                       ))}
                     </div>

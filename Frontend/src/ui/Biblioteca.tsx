@@ -24,6 +24,7 @@ const CATEGORIAS: { id: Categoria | 'todos'; etiqueta: string }[] = [
   { id: 'pdf', etiqueta: 'PDFs' },
   { id: 'guia', etiqueta: 'Guías' },
   { id: 'datasheet', etiqueta: 'Datasheets' },
+  { id: 'esquematico', etiqueta: 'Esquemáticos' },
 ]
 
 const DIFICULTADES: { id: Dificultad; etiqueta: string }[] = [

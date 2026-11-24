@@ -28,7 +28,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 BUCKET = "materiales-biblioteca"
 
-CATEGORIAS_VALIDAS = {"libro", "pdf", "guia", "datasheet"}
+CATEGORIAS_VALIDAS = {"libro", "pdf", "guia", "datasheet", "esquematico"}
 DIFICULTADES_VALIDAS = {"basico", "intermedio", "experto", "referencia"}
 
 

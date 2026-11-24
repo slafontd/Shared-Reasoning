@@ -2,7 +2,7 @@ import { fetchAutenticado } from './auth'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-export type Categoria = 'libro' | 'pdf' | 'guia' | 'datasheet'
+export type Categoria = 'libro' | 'pdf' | 'guia' | 'datasheet' | 'esquematico'
 export type Dificultad = 'basico' | 'intermedio' | 'experto' | 'referencia'
 
 export type Material = {
@@ -111,6 +111,15 @@ export async function descargarMaterial(material: Material): Promise<void> {
   a.download = material.nombreArchivo ?? material.titulo
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+
+export async function obtenerArchivoMaterial(material: Material): Promise<File> {
+  const res = await fetchAutenticado(material.descargaUrl)
+  if (!res.ok) throw new Error('No se pudo cargar esa imagen.')
+  const blob = await res.blob()
+  const nombre = material.nombreArchivo ?? `${material.titulo}.png`
+  return new File([blob], nombre, { type: blob.type })
 }
 
 export async function eliminarMaterial(id: string): Promise<void> {
